@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  namespace: universal-llm-gateway
+  labels:
+    app: llm-gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: llm-gateway
+  template:
+    metadata:
+      labels:
+        app: llm-gateway
+    spec:
+      containers:
+      - name: llm-gateway
+        image: universal-llm-gateway:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        envFrom:
+        - configMapRef:
+            name: gateway-config
+        - secretRef:
+            name: gateway-secrets
+        # Ensure we inject required OpenTelemetry variables for the container
+        env:
+        - name: ENABLE_TRACING
+          value: "true"
+        - name: OTLP_ENDPOINT
+          value: "http://jaeger:4317"

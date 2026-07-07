@@ -1,0 +1,167 @@
+{
+    "annotations": {
+        "list": []
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [],
+    "liveNow": false,
+    "panels": [
+        {
+            "title": "Total Requests",
+            "type": "stat",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "sum(gateway_requests_total)",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 0,
+                "y": 0,
+                "w": 6,
+                "h": 6
+            }
+        },
+        {
+            "title": "Error Rate",
+            "type": "stat",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "sum(rate(gateway_requests_total{status_code=~\"5..|429\"}[5m])) / sum(rate(gateway_requests_total[5m])) * 100",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 6,
+                "y": 0,
+                "w": 6,
+                "h": 6
+            }
+        },
+        {
+            "title": "Cache Hit Rate",
+            "type": "stat",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "gateway_cache_hits_total / gateway_requests_total * 100",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 12,
+                "y": 0,
+                "w": 6,
+                "h": 6
+            }
+        },
+        {
+            "title": "Total Cost (USD)",
+            "type": "stat",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "sum(gateway_cost_usd_total)",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 18,
+                "y": 0,
+                "w": 6,
+                "h": 6
+            }
+        },
+        {
+            "title": "Request Rate by Provider (RPS)",
+            "type": "timeseries",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "sum(rate(gateway_requests_total[1m])) by (provider)",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 0,
+                "y": 6,
+                "w": 12,
+                "h": 8
+            }
+        },
+        {
+            "title": "Average Latency (ms)",
+            "type": "timeseries",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "rate(gateway_request_duration_ms_sum[1m]) / rate(gateway_request_duration_ms_count[1m])",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 12,
+                "y": 6,
+                "w": 12,
+                "h": 8
+            }
+        },
+        {
+            "title": "Token Usage Rate",
+            "type": "timeseries",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "sum(rate(gateway_tokens_total[1m])) by (token_type)",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 0,
+                "y": 14,
+                "w": 12,
+                "h": 8
+            }
+        },
+        {
+            "title": "Circuit Breaker Failures",
+            "type": "timeseries",
+            "datasource": "Prometheus",
+            "targets": [
+                {
+                    "expr": "gateway_provider_circuit_failures",
+                    "refId": "A"
+                }
+            ],
+            "gridPos": {
+                "x": 12,
+                "y": 14,
+                "w": 12,
+                "h": 8
+            }
+        }
+    ],
+    "schemaVersion": 38,
+    "style": "dark",
+    "tags": [
+        "llm",
+        "gateway",
+        "production"
+    ],
+    "templating": {
+        "list": []
+    },
+    "time": {
+        "from": "now-6h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Universal LLM Gateway - Production",
+    "uid": "ulgr1",
+    "version": 1
+}

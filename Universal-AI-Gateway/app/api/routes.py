@@ -415,3 +415,57 @@ async def _handle_streaming(
             "Connection": "keep-alive",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Reverse Proxy Routes (Step 3)
+# ---------------------------------------------------------------------------
+
+from fastapi import Response
+from app.core.proxy_config import get_route
+from app.services.proxy import forward_request
+
+proxy_router = APIRouter(tags=["Proxy"])
+
+
+@proxy_router.api_route(
+    "/{full_path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+)
+async def proxy_request(
+    request: Request,
+    full_path: str,
+    db: AsyncSession = Depends(get_db)
+) -> Response:
+    """
+    Catch-all proxy endpoint forwarding matched routes to the downstream API gateway.
+    """
+    route = get_route(request.url.path)
+    if route is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "ROUTE_NOT_FOUND",
+                    "path": request.url.path,
+                    "message": f"No proxy route matched path: {request.url.path}"
+                }
+            }
+        )
+
+    try:
+        return await forward_request(request, route, db)
+    except Exception as exc:
+        logger.error("Unhandled proxy exception: %s", exc, exc_info=True)
+        correlation_id = request.headers.get("X-Correlation-ID") or getattr(request.state, "request_id", "unknown")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "An unhandled error occurred while routing your request.",
+                    "path": request.url.path,
+                    "correlation_id": correlation_id
+                }
+            }
+        )

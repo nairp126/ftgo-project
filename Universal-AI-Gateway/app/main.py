@@ -76,6 +76,13 @@ def create_app() -> FastAPI:
             logger.info("Provider HTTP clients closed")
         except Exception:
             pass
+        # Close proxy HTTP client
+        try:
+            from app.services.proxy import close_proxy_client
+            await close_proxy_client()
+            logger.info("Proxy HTTP client closed")
+        except Exception:
+            pass
 
     app = FastAPI(
         title=settings.app_name,
@@ -129,6 +136,9 @@ def create_app() -> FastAPI:
     @app.get("/metrics", tags=["Monitoring"])
     async def get_metrics():
         return metrics.get_metrics()
+        
+    from app.api.routes import proxy_router
+    app.include_router(proxy_router, dependencies=[Depends(authenticate_api_key)])
 
     # ------------------------------------------------------------------
     # Startup / shutdown events

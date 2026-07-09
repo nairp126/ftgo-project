@@ -1,0 +1,334 @@
+version: '3.8'
+
+networks:
+  ftgo-network:
+    driver: bridge
+
+services:
+  # Infrastructure Services
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: zookeeper
+    networks:
+      - ftgo-network
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: kafka
+    networks:
+      - ftgo-network
+    ports:
+      - "9092:9092"
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7.0-alpine
+    container_name: redis
+    networks:
+      - ftgo-network
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Databases
+  postgres-gateway:
+    image: postgres:15-alpine
+    container_name: postgres-gateway
+    networks:
+      - ftgo-network
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: gateway
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-order:
+    image: postgres:15-alpine
+    container_name: postgres-order
+    networks:
+      - ftgo-network
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: orders
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-kitchen:
+    image: postgres:15-alpine
+    container_name: postgres-kitchen
+    networks:
+      - ftgo-network
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: kitchen
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-restaurant:
+    image: postgres:15-alpine
+    container_name: postgres-restaurant
+    networks:
+      - ftgo-network
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: restaurants
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-accounting:
+    image: postgres:15-alpine
+    container_name: postgres-accounting
+    networks:
+      - ftgo-network
+    ports:
+      - "5436:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: accounting
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-consumer:
+    image: postgres:15-alpine
+    container_name: postgres-consumer
+    networks:
+      - ftgo-network
+    ports:
+      - "5437:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: consumers
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-history:
+    image: postgres:15-alpine
+    container_name: postgres-history
+    networks:
+      - ftgo-network
+    ports:
+      - "5438:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: order_history
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Application Microservices
+  ftgo-consumer-service:
+    build: ./ftgo-consumer-service
+    container_name: ftgo-consumer-service
+    networks:
+      - ftgo-network
+    ports:
+      - "8085:8080"
+    depends_on:
+      postgres-consumer:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-consumer:5432/consumers
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgrespassword
+      EVENTUATELOCAL_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EVENTUATELOCAL_ZOOKEEPER_CONNECTION_STRING: zookeeper:2181
+
+  ftgo-restaurant-service:
+    build: ./ftgo-restaurant-service
+    container_name: ftgo-restaurant-service
+    networks:
+      - ftgo-network
+    ports:
+      - "8083:8080"
+    depends_on:
+      postgres-restaurant:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-restaurant:5432/restaurants
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgrespassword
+      EVENTUATELOCAL_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EVENTUATELOCAL_ZOOKEEPER_CONNECTION_STRING: zookeeper:2181
+
+  ftgo-accounting-service:
+    build: ./ftgo-accounting-service
+    container_name: ftgo-accounting-service
+    networks:
+      - ftgo-network
+    ports:
+      - "8084:8080"
+    depends_on:
+      postgres-accounting:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-accounting:5432/accounting
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgrespassword
+      EVENTUATELOCAL_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EVENTUATELOCAL_ZOOKEEPER_CONNECTION_STRING: zookeeper:2181
+
+  ftgo-kitchen-service:
+    build: ./ftgo-kitchen-service
+    container_name: ftgo-kitchen-service
+    networks:
+      - ftgo-network
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres-kitchen:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-kitchen:5432/kitchen
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgrespassword
+      EVENTUATELOCAL_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EVENTUATELOCAL_ZOOKEEPER_CONNECTION_STRING: zookeeper:2181
+
+  ftgo-order-service:
+    build: ./ftgo-order-service
+    container_name: ftgo-order-service
+    networks:
+      - ftgo-network
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres-order:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-order:5432/orders
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgrespassword
+      EVENTUATELOCAL_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EVENTUATELOCAL_ZOOKEEPER_CONNECTION_STRING: zookeeper:2181
+
+  ftgo-order-history-service:
+    build: ./ftgo-order-history-service
+    container_name: ftgo-order-history-service
+    networks:
+      - ftgo-network
+    ports:
+      - "8086:8080"
+    depends_on:
+      postgres-history:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-history:5432/order_history
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgrespassword
+      EVENTUATELOCAL_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      EVENTUATELOCAL_ZOOKEEPER_CONNECTION_STRING: zookeeper:2181
+
+  # API Gateways
+  ftgo-api-gateway:
+    build: ./ftgo-api-gateway
+    container_name: ftgo-api-gateway
+    networks:
+      - ftgo-network
+    ports:
+      - "8080:8080"
+    depends_on:
+      - ftgo-order-service
+      - ftgo-kitchen-service
+      - ftgo-restaurant-service
+      - ftgo-accounting-service
+      - ftgo-consumer-service
+      - ftgo-order-history-service
+
+  universal-ai-gateway:
+    build:
+      context: ./Universal-AI-Gateway
+      dockerfile: Dockerfile
+    container_name: universal-ai-gateway
+    networks:
+      - ftgo-network
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres-gateway:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ftgo-api-gateway:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@postgres-gateway:5432/gateway
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET_KEY: test-secret-key-123-test-secret-key-123
+      DOWNSTREAM_URL: http://ftgo-api-gateway:8080
+      DOWNSTREAM_HEALTH_URL: http://ftgo-api-gateway:8080/actuator/health
+      LOG_LEVEL: info

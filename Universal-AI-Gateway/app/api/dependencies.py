@@ -41,6 +41,10 @@ async def authenticate_api_key(
     Raises:
         HTTPException 401 if no key provided, key is invalid, or key is inactive.
     """
+    # Short-circuit if request has already been authenticated via middleware
+    if getattr(request.state, "auth_method", None) in ("api_key", "jwt"):
+        return None
+
     raw_key = _extract_raw_key(authorization, x_api_key)
 
     if raw_key is None:

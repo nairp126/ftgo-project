@@ -66,7 +66,7 @@ async def forward_request(
         if k_lower in (
             "authorization", "x-api-key", "cookie", "x-forwarded-proto",
             "x-correlation-id", "x-request-id", "x-forwarded-for", "x-forwarded-host",
-            "x-tenant-id", "x-authenticated"
+            "x-tenant-id", "x-authenticated", "x-user-id", "x-user-roles"
         ):
             continue
         headers[k] = v
@@ -91,6 +91,14 @@ async def forward_request(
     if tenant_id:
         headers["X-Tenant-ID"] = str(tenant_id)
     headers["X-Authenticated"] = "true"
+
+    user_id = getattr(request.state, "user_id", None)
+    if user_id:
+        headers["X-User-ID"] = str(user_id)
+
+    roles = getattr(request.state, "roles", None)
+    if roles:
+        headers["X-User-Roles"] = ",".join(roles)
 
     # 3. Request body
     body = await request.body()

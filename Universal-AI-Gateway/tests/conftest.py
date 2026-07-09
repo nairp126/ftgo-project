@@ -1,3 +1,6 @@
+import os
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-123-test-secret-key-123"
+
 import pytest
 from unittest.mock import patch
 

@@ -33,8 +33,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r Universal-AI-Gateway/requirements.txt
-          pip install pytest pytest-cov pytest-asyncio pytest-mock httpx respx
+          pip install -r Universal-AI-Gateway/requirements-dev.txt pytest-mock
 
       - name: Run Tests
         run: |

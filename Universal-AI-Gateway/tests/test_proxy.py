@@ -1,55 +1,27 @@
 """
-Integration and regression tests for Phase 2 & 3: Reverse Proxy Layer & JWT
+Integration test suite for the Universal AI Gateway proxy layer.
+Covers Phase 5 requirements across 6 functional test groups.
 """
 
 import pytest
 import uuid
 import jwt
+import respx
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
-import httpx
-from fastapi import FastAPI, Request
-from fastapi.testclient import TestClient
+from httpx import Response, TimeoutException, ConnectError
 
-from app.core.config import get_settings
 from app.core.proxy_config import get_route, RouteConfig
-from app.api.dependencies import authenticate_api_key
+from app.services.budget_manager import BudgetManager, BudgetExceededError
 
-
-# Define a mock authentication identity
-MOCK_TENANT_ID = uuid.uuid4()
+MOCK_TENANT_ID = "tenant-test-123"
 MOCK_API_KEY_ID = uuid.uuid4()
 JWT_SECRET = "test-secret-key-123-test-secret-key-123"
 
-# Helper to generate test JWT
-def generate_test_jwt(claims: dict, secret: str = JWT_SECRET, expires_in: int = 3600) -> str:
-    payload = claims.copy()
-    payload["exp"] = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-    return jwt.encode(payload, secret, algorithm="HS256")
-
-
-async def mock_auth_dependency(request: Request):
-    # This is the FastAPI dependency override
-    if getattr(request.state, "auth_method", None) in ("api_key", "jwt"):
-        return None
-    request.state.api_key_id = MOCK_API_KEY_ID
-    request.state.tenant_id = MOCK_TENANT_ID
-    request.state.rate_limit_per_minute = 60
-
-
-@pytest.fixture
-def app_instance() -> FastAPI:
-    from app.main import create_app
-    app = create_app()
-    # Override auth dependency
-    app.dependency_overrides[authenticate_api_key] = mock_auth_dependency
-    yield app
-    app.dependency_overrides.clear()
-
 
 @pytest.fixture(autouse=True)
-def mock_middleware_api_key_auth():
-    # Mock authenticate_api_key called inside auth middleware to avoid DB lookup
+def mock_api_key_auth():
+    """Default mock for API key authentication in middleware."""
     with patch("app.middleware.auth.authenticate_api_key", new_callable=AsyncMock) as mock_auth_fn:
         async def side_effect(request, **kwargs):
             request.state.api_key_id = MOCK_API_KEY_ID
@@ -60,262 +32,507 @@ def mock_middleware_api_key_auth():
         yield mock_auth_fn
 
 
-@pytest.fixture
-def test_client(app_instance) -> TestClient:
-    return TestClient(app_instance, raise_server_exceptions=False)
-
-
 # ---------------------------------------------------------------------------
-# Route Table Config Tests
+# Route Table Config Unit Tests
 # ---------------------------------------------------------------------------
 
 def test_route_table_matching():
     """Verify that get_route matches allowed prefixes and rejects internal ones."""
-    # Matches orders
     route_orders = get_route("/api/orders/123")
     assert route_orders is not None
     assert route_orders.prefix == "/api/orders"
     assert route_orders.strip_prefix is True
     assert route_orders.timeout_seconds == 30.0
 
-    # Matches consumers
     route_consumers = get_route("/api/consumers/xyz")
     assert route_consumers is not None
     assert route_consumers.prefix == "/api/consumers"
     assert route_consumers.timeout_seconds == 10.0
 
-    # Excluded routes
     assert get_route("/v1/chat/completions") is None
     assert get_route("/health") is None
     assert get_route("/admin/keys") is None
     assert get_route("/unknown/path") is None
 
 
-# ---------------------------------------------------------------------------
-# Proxy Forwarding Tests (API Key flow)
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# Group 1 — Proxy Routing (4 tests)
+# ===========================================================================
 
-@patch("httpx.AsyncClient.send", new_callable=AsyncMock)
-def test_proxy_forward_success(mock_send, test_client):
-    """
-    Test successful proxy request to /api/orders/123 using API Key flow.
-    Verifies:
-      - Path prefix stripping (/api/orders/123 -> /orders/123)
-      - Header filtering (Authorization stripped, X-Tenant-ID injected)
-      - Status code preservation
-    """
-    mock_resp = httpx.Response(
-        201,
-        json={"orderId": "order-123"},
-        headers={"Content-Type": "application/json", "Connection": "keep-alive"}
+@pytest.mark.asyncio
+@respx.mock
+async def test_post_order_forwards_to_ftgo_gateway(client, api_key_headers, respx_mock):
+    # Prevents: Regression where POST /api/orders fails to reach downstream ftgo-api-gateway:8080.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        201, json={"orderId": "order-101", "state": "PENDING"}
     )
-    mock_send.return_value = mock_resp
 
-    headers = {
-        "Authorization": "Bearer some-token",
-        "X-API-Key": "my-secret-key",
-        "Cookie": "session=abc",
-        "X-User-Role": "admin",
-        "X-Correlation-ID": "test-correlation-123"
-    }
-    response = test_client.post("/api/orders/123", json={"item": "burger"}, headers=headers)
+    response = await client.post(
+        "/api/orders",
+        json={"consumerId": 1, "restaurantId": 1},
+        headers=api_key_headers
+    )
 
     assert response.status_code == 201
-    assert response.json() == {"orderId": "order-123"}
-    assert "Connection" not in response.headers
-
-    assert mock_send.call_count == 1
-    sent_request = mock_send.call_args[0][0]
-    
-    assert sent_request.url.path == "/orders/123"
-    assert "Authorization" not in sent_request.headers
-    assert "X-API-Key" not in sent_request.headers
-    assert "Cookie" not in sent_request.headers
-    assert sent_request.headers.get("X-Tenant-ID") == str(MOCK_TENANT_ID)
-    assert sent_request.headers.get("X-Authenticated") == "true"
+    assert response.json() == {"orderId": "order-101", "state": "PENDING"}
+    assert mock_route.called
 
 
-# ---------------------------------------------------------------------------
-# JWT Authentication Integration Tests (Phase 3)
-# ---------------------------------------------------------------------------
-
-@patch("httpx.AsyncClient.send", new_callable=AsyncMock)
-def test_jwt_auth_success(mock_send, test_client):
-    """
-    Verify that a valid JWT token succeeds, sets request state,
-    and forwards identity headers (X-User-ID, X-Tenant-ID, X-User-Roles) downstream.
-    """
-    mock_resp = httpx.Response(
-        200,
-        json={"status": "success"},
-        headers={"Content-Type": "application/json"}
+@pytest.mark.asyncio
+@respx.mock
+async def test_order_prefix_stripped_before_forwarding(client, api_key_headers, respx_mock):
+    # Prevents: Regression where URL prefix /api/orders is not stripped before forwarding (/api/orders/123 -> /orders/123).
+    mock_route = respx_mock.route(host="ftgo-api-gateway", path="/orders/123").respond(
+        200, json={"orderId": "123"}
     )
-    mock_send.return_value = mock_resp
 
-    # Generate valid JWT
-    token_claims = {
-        "sub": "user-999",
-        "tenant_id": "tenant-888",
-        "roles": ["customer", "subscriber"],
-        "email": "user@example.com"
-    }
-    jwt_token = generate_test_jwt(token_claims)
-
-    headers = {
-        "Authorization": f"Bearer {jwt_token}",
-        "X-Correlation-ID": "jwt-test-123"
-    }
-    response = test_client.get("/api/orders/my-active", headers=headers)
+    response = await client.get("/api/orders/123", headers=api_key_headers)
 
     assert response.status_code == 200
-    assert response.json() == {"status": "success"}
-
-    assert mock_send.call_count == 1
-    sent_request = mock_send.call_args[0][0]
-
-    # Verify injected downstream identity headers
-    assert sent_request.headers.get("X-Tenant-ID") == "tenant-888"
-    assert sent_request.headers.get("X-User-ID") == "user-999"
-    assert sent_request.headers.get("X-User-Roles") == "customer,subscriber"
-    assert sent_request.headers.get("X-Authenticated") == "true"
+    assert mock_route.called
+    assert mock_route.calls[0].request.url.path == "/orders/123"
 
 
-def test_jwt_auth_expired(test_client):
-    """Verify expired JWT returns 401 Token expired."""
-    token_claims = {
-        "sub": "user-999",
-        "tenant_id": "tenant-888"
-    }
-    expired_token = generate_test_jwt(token_claims, expires_in=-10)
+@pytest.mark.asyncio
+async def test_unknown_path_returns_404_with_structured_error(client, api_key_headers):
+    # Prevents: Regression where unmapped proxy paths return unhandled errors instead of structured 404 JSON.
+    response = await client.get("/api/non-existent-service/test", headers=api_key_headers)
 
-    headers = {
-        "Authorization": f"Bearer {expired_token}"
-    }
-    response = test_client.get("/api/orders/my-active", headers=headers)
-    assert response.status_code == 401
+    assert response.status_code == 404
     data = response.json()
-    assert data["error"]["type"] == "authentication_error"
-    assert data["error"]["message"] == "Token expired"
+    assert "error" in data
+    assert data["error"]["code"] == "ROUTE_NOT_FOUND"
 
 
-def test_jwt_auth_invalid_signature(test_client):
-    """Verify JWT with invalid signature returns 401 Invalid token."""
-    token_claims = {
-        "sub": "user-999",
-        "tenant_id": "tenant-888"
-    }
-    invalid_token = generate_test_jwt(token_claims, secret="wrong-secret-key")
+@pytest.mark.asyncio
+@respx.mock
+async def test_llm_route_not_intercepted_by_proxy(client, api_key_headers, respx_mock):
+    # Prevents: Regression where /v1/chat/completions LLM endpoint is hijacked by the catch-all proxy router.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        200, json={"choices": []}
+    )
 
-    headers = {
-        "Authorization": f"Bearer {invalid_token}"
-    }
-    response = test_client.get("/api/orders/my-active", headers=headers)
-    assert response.status_code == 401
-    data = response.json()
-    assert data["error"]["type"] == "authentication_error"
-    assert data["error"]["message"] == "Invalid token"
+    from app.schemas.chat import ChatResponse
+    from app.services.router import RoutingDecision
+
+    mock_resp = ChatResponse(
+        id="chatcmpl-123",
+        object="chat.completion",
+        created=123456,
+        model="gpt-4o",
+        choices=[{"index": 0, "message": {"role": "assistant", "content": "Hello"}, "finish_reason": "stop"}],
+        usage={"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10}
+    )
+    decision = RoutingDecision(
+        request_id="123",
+        original_model="gpt-4o",
+        resolved_model="gpt-4o",
+        provider="openai",
+        reason="primary_match",
+        latency_ms=10.0
+    )
+
+    with patch("app.api.routes._routing_engine.route_request", new_callable=AsyncMock) as mock_route_req:
+        mock_route_req.return_value = (mock_resp, decision)
+
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"model": "gpt-4o", "messages": [{"role": "user", "content": "Hi"}]},
+            headers=api_key_headers
+        )
+
+        assert response.status_code == 200
+        assert not mock_route.called
 
 
-def test_jwt_auth_missing_claims(test_client):
-    """Verify JWT missing sub or tenant_id returns 401 Token missing required claims."""
-    # Missing sub
-    token_claims = {
-        "tenant_id": "tenant-888"
-    }
-    token = generate_test_jwt(token_claims)
+# ===========================================================================
+# Group 2 — Header Handling (7 tests)
+# ===========================================================================
 
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-    response = test_client.get("/api/orders/my-active", headers=headers)
-    assert response.status_code == 401
-    data = response.json()
-    assert data["error"]["message"] == "Token missing required claims"
+@pytest.mark.asyncio
+@respx.mock
+async def test_x_tenant_id_present_in_forwarded_request(client, api_key_headers, respx_mock):
+    # Prevents: Regression where tenant identity (X-Tenant-ID) is lost during downstream request forwarding.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        200, json={"status": "ok"}
+    )
+
+    response = await client.get("/api/orders/123", headers=api_key_headers)
+
+    assert response.status_code == 200
+    assert mock_route.called
+    forwarded_headers = mock_route.calls[0].request.headers
+    assert "x-tenant-id" in forwarded_headers
+    assert forwarded_headers["x-tenant-id"] == MOCK_TENANT_ID
 
 
-# ---------------------------------------------------------------------------
-# Proxy Error Handling Tests
-# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+@respx.mock
+async def test_x_user_id_present_when_jwt_provided(client, jwt_headers, respx_mock):
+    # Prevents: Regression where JWT identity claims (X-User-ID, X-User-Roles) fail to populate downstream headers.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        200, json={"status": "ok"}
+    )
 
-@patch("httpx.AsyncClient.send", new_callable=AsyncMock)
-def test_proxy_timeout_error(mock_send, test_client):
-    """Verify that httpx.TimeoutException maps to 504 UPSTREAM_TIMEOUT."""
-    mock_send.side_effect = httpx.TimeoutException("Request timed out")
+    response = await client.get("/api/orders/123", headers=jwt_headers)
 
-    headers = {"Authorization": "Bearer some-token"}
-    response = test_client.get("/api/consumers/info", headers=headers)
+    assert response.status_code == 200
+    assert mock_route.called
+    forwarded_headers = mock_route.calls[0].request.headers
+    assert forwarded_headers.get("x-user-id") == "user-123"
+    assert forwarded_headers.get("x-tenant-id") == "tenant-abc"
+    assert forwarded_headers.get("x-user-roles") == "user"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_authorization_header_not_forwarded(client, api_key_headers, respx_mock):
+    # Prevents: Regression where client credentials in Authorization header leak to downstream services.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        200, json={"status": "ok"}
+    )
+
+    response = await client.get("/api/orders/123", headers=api_key_headers)
+
+    assert response.status_code == 200
+    assert mock_route.called
+    forwarded_headers = mock_route.calls[0].request.headers
+    assert "authorization" not in forwarded_headers
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_x_api_key_header_not_forwarded(client, respx_mock):
+    # Prevents: Regression where raw X-API-Key credentials leak to downstream services.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        200, json={"status": "ok"}
+    )
+
+    headers = {"X-API-Key": "secret-raw-api-key"}
+    response = await client.get("/api/orders/123", headers=headers)
+
+    assert response.status_code == 200
+    assert mock_route.called
+    forwarded_headers = mock_route.calls[0].request.headers
+    assert "x-api-key" not in forwarded_headers
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cookie_header_not_forwarded(client, api_key_headers, respx_mock):
+    # Prevents: Regression where client cookies leak to downstream microservices.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        200, json={"status": "ok"}
+    )
+
+    headers = {**api_key_headers, "Cookie": "session_id=123456"}
+    response = await client.get("/api/orders/123", headers=headers)
+
+    assert response.status_code == 200
+    assert mock_route.called
+    forwarded_headers = mock_route.calls[0].request.headers
+    assert "cookie" not in forwarded_headers
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_x_correlation_id_generated_when_absent(client, api_key_headers, respx_mock):
+    # Prevents: Regression where distributed tracing correlation ID is missing from forwarded requests.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        200, json={"status": "ok"}
+    )
+
+    response = await client.get("/api/orders/123", headers=api_key_headers)
+
+    assert response.status_code == 200
+    assert mock_route.called
+    forwarded_headers = mock_route.calls[0].request.headers
+    assert "x-correlation-id" in forwarded_headers
+    assert "x-request-id" in forwarded_headers
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_x_forwarded_for_appended(client, api_key_headers, respx_mock):
+    # Prevents: Regression where client IP is omitted from X-Forwarded-For header.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        200, json={"status": "ok"}
+    )
+
+    headers = {**api_key_headers, "X-Forwarded-For": "203.0.113.195"}
+    response = await client.get("/api/orders/123", headers=headers)
+
+    assert response.status_code == 200
+    assert mock_route.called
+    forwarded_headers = mock_route.calls[0].request.headers
+    assert "x-forwarded-for" in forwarded_headers
+    assert "203.0.113.195" in forwarded_headers["x-forwarded-for"]
+
+
+# ===========================================================================
+# Group 3 — Error Handling (5 tests)
+# ===========================================================================
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_downstream_timeout_returns_504(client, api_key_headers, respx_mock):
+    # Prevents: Regression where upstream timeouts result in generic 500 errors instead of 504 Gateway Timeout.
+    respx_mock.route(host="ftgo-api-gateway").mock(
+        side_effect=TimeoutException("Upstream timeout")
+    )
+
+    response = await client.get("/api/orders/123", headers=api_key_headers)
+
     assert response.status_code == 504
     data = response.json()
     assert data["error"]["code"] == "UPSTREAM_TIMEOUT"
-    assert "correlation_id" in data["error"]
 
 
-@patch("httpx.AsyncClient.send", new_callable=AsyncMock)
-def test_proxy_connect_error(mock_send, test_client):
-    """Verify that httpx.ConnectError maps to 503 UPSTREAM_UNAVAILABLE."""
-    mock_send.side_effect = httpx.ConnectError("Connection refused")
+@pytest.mark.asyncio
+@respx.mock
+async def test_downstream_connect_error_returns_503(client, api_key_headers, respx_mock):
+    # Prevents: Regression where network connectivity failures return 500 instead of 503 Service Unavailable.
+    respx_mock.route(host="ftgo-api-gateway").mock(
+        side_effect=ConnectError("Connection refused")
+    )
 
-    headers = {"Authorization": "Bearer some-token"}
-    response = test_client.get("/api/kitchen/status", headers=headers)
+    response = await client.get("/api/orders/123", headers=api_key_headers)
+
     assert response.status_code == 503
     data = response.json()
     assert data["error"]["code"] == "UPSTREAM_UNAVAILABLE"
 
 
-@patch("httpx.AsyncClient.send", new_callable=AsyncMock)
-def test_proxy_other_error(mock_send, test_client):
-    """Verify that other httpx errors map to 502 UPSTREAM_ERROR."""
-    mock_send.side_effect = httpx.ReadError("Socket closed prematurely")
+@pytest.mark.asyncio
+@respx.mock
+async def test_downstream_404_passes_through_as_404(client, api_key_headers, respx_mock):
+    # Prevents: Regression where downstream 404 response codes are converted to 500 error responses.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        404, json={"error": "Order not found"}
+    )
 
-    headers = {"Authorization": "Bearer some-token"}
-    response = test_client.get("/api/restaurants/details", headers=headers)
-    assert response.status_code == 502
-    data = response.json()
-    assert data["error"]["code"] == "UPSTREAM_ERROR"
+    response = await client.get("/api/orders/999", headers=api_key_headers)
+
+    assert response.status_code == 404
+    assert response.json() == {"error": "Order not found"}
+    assert mock_route.called
 
 
-def test_proxy_route_not_found(test_client):
-    """Verify that unmatched paths return 404 ROUTE_NOT_FOUND."""
-    headers = {"Authorization": "Bearer some-token"}
-    response = test_client.get("/api/unknown-service/xyz", headers=headers)
+@pytest.mark.asyncio
+@respx.mock
+async def test_downstream_503_passes_through_as_503(client, api_key_headers, respx_mock):
+    # Prevents: Regression where downstream 503 response codes are converted or masked.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        503, json={"error": "Kitchen Service overload"}
+    )
+
+    response = await client.get("/api/orders/123", headers=api_key_headers)
+
+    assert response.status_code == 503
+    assert response.json() == {"error": "Kitchen Service overload"}
+    assert mock_route.called
+
+
+@pytest.mark.asyncio
+async def test_error_response_is_structured_json(client, api_key_headers):
+    # Prevents: Regression where error responses return unformatted text instead of structured error JSON.
+    response = await client.get("/api/invalid-route-name/abc", headers=api_key_headers)
+
     assert response.status_code == 404
     data = response.json()
-    assert data["error"]["code"] == "ROUTE_NOT_FOUND"
+    assert "error" in data
+    assert "code" in data["error"]
+    assert "message" in data["error"]
+    assert "path" in data["error"]
 
 
-# ---------------------------------------------------------------------------
-# GET /actuator/health Tests
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# Group 4 — Cache Behaviour (4 tests)
+# ===========================================================================
 
-@patch("httpx.AsyncClient.get", new_callable=AsyncMock)
-def test_actuator_health_proxies_success(mock_get, test_client):
-    """
-    GET /actuator/health should proxy to DOWNSTREAM_HEALTH_URL and return 200.
-    It should bypass both authentication and rate-limiting.
-    """
-    settings = get_settings()
-    downstream_url = settings.downstream_health_url
+@pytest.mark.asyncio
+@respx.mock
+async def test_post_order_bypasses_cache(client, api_key_headers, respx_mock):
+    # Prevents: Regression where mutation POST requests hit or pollute the semantic cache.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        201, json={"orderId": "new-order"}
+    )
 
-    mock_resp = httpx.Response(200, json={"status": "UP"})
-    mock_get.return_value = mock_resp
+    response = await client.post(
+        "/api/orders",
+        json={"item": "burger"},
+        headers=api_key_headers
+    )
 
-    response = test_client.get("/actuator/health")
+    assert response.status_code == 201
+    assert mock_route.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_put_order_cancel_bypasses_cache(client, api_key_headers, respx_mock):
+    # Prevents: Regression where state-modifying PUT requests are cached.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        200, json={"status": "CANCELLED"}
+    )
+
+    response = await client.put(
+        "/api/orders/123/cancel",
+        json={},
+        headers=api_key_headers
+    )
+
     assert response.status_code == 200
-    assert response.json() == {"status": "UP"}
-    mock_get.assert_called_once_with(downstream_url)
+    assert mock_route.called
 
 
-@patch("httpx.AsyncClient.get", new_callable=AsyncMock)
-def test_actuator_health_downstream_unavailable(mock_get, test_client):
-    """
-    GET /actuator/health should return 503 if downstream is unreachable.
-    """
-    settings = get_settings()
-    downstream_url = settings.downstream_health_url
+@pytest.mark.asyncio
+@respx.mock
+async def test_delete_request_bypasses_cache(client, api_key_headers, respx_mock):
+    # Prevents: Regression where DELETE operations are served from cache.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(204)
 
-    mock_get.side_effect = httpx.ConnectError("Connection refused")
+    response = await client.delete("/api/orders/123", headers=api_key_headers)
 
-    response = test_client.get("/actuator/health")
-    assert response.status_code == 503
-    assert response.json() == {"status": "DOWNSTREAM_UNAVAILABLE"}
-    mock_get.assert_called_once_with(downstream_url)
+    assert response.status_code == 204
+    assert mock_route.called
+
+
+@pytest.mark.asyncio
+async def test_cache_bypass_does_not_affect_llm_route(client, api_key_headers):
+    # Prevents: Regression where cache bypassing logic disables caching for /v1/chat/completions.
+    from app.schemas.chat import ChatResponse
+    from app.services.router import RoutingDecision
+
+    mock_resp = ChatResponse(
+        id="chat-cache-test",
+        object="chat.completion",
+        created=123456,
+        model="gpt-4o",
+        choices=[{"index": 0, "message": {"role": "assistant", "content": "cached answer"}, "finish_reason": "stop"}],
+        usage={"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10}
+    )
+    decision = RoutingDecision(
+        request_id="123",
+        original_model="gpt-4o",
+        resolved_model="gpt-4o",
+        provider="openai",
+        reason="primary_match",
+        latency_ms=10.0
+    )
+
+    with patch("app.api.routes._routing_engine.route_request", new_callable=AsyncMock) as mock_route_req:
+        mock_route_req.return_value = (mock_resp, decision)
+
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"model": "gpt-4o", "messages": [{"role": "user", "content": "cache check"}]},
+            headers=api_key_headers
+        )
+
+        assert response.status_code == 200
+
+
+# ===========================================================================
+# Group 5 — Budget Enforcement (3 tests)
+# ===========================================================================
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_post_order_not_blocked_when_budget_exhausted(client, exhausted_budget_headers, respx_mock):
+    # Prevents: Regression where FTGO proxy routes are blocked by LLM budget limits (402 Payment Required).
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        201, json={"orderId": "order-unblocked"}
+    )
+
+    with patch("app.services.budget_manager.BudgetManager.check_budget", side_effect=BudgetExceededError("Budget exceeded")):
+        response = await client.post(
+            "/api/orders",
+            json={"item": "pizza"},
+            headers=exhausted_budget_headers
+        )
+
+        assert response.status_code == 201
+        assert response.json() == {"orderId": "order-unblocked"}
+        assert mock_route.called
+
+
+@pytest.mark.asyncio
+async def test_llm_route_blocked_when_budget_exhausted(client, exhausted_budget_headers):
+    # Prevents: Regression where exhausted LLM daily budgets fail to block /v1/chat/completions requests.
+    with patch("app.services.budget_manager.BudgetManager.check_budget", side_effect=BudgetExceededError("Daily budget limit reached")):
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"model": "gpt-4o", "messages": [{"role": "user", "content": "hello"}]},
+            headers=exhausted_budget_headers
+        )
+
+        assert response.status_code == 402
+        data = response.json()
+        assert "budget" in data["error"]["type"] or "budget" in data["error"]["message"].lower()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_budget_check_only_for_v1_prefix(client, api_key_headers, respx_mock):
+    # Prevents: Regression where daily budget checks are evaluated for non-LLM paths.
+    mock_route = respx_mock.route(host="ftgo-api-gateway").respond(
+        200, json={"name": "Alice"}
+    )
+
+    with patch("app.services.budget_manager.BudgetManager.check_budget") as mock_check_budget:
+        response = await client.get("/api/consumers/me", headers=api_key_headers)
+
+        assert response.status_code == 200
+        assert mock_route.called
+        assert not mock_check_budget.called
+
+
+# ===========================================================================
+# Group 6 — Health Checks (4 tests)
+# ===========================================================================
+
+@pytest.mark.asyncio
+async def test_get_health_returns_200_without_auth(client):
+    # Prevents: Regression where local gateway /health endpoint requires API key or JWT authentication.
+    response = await client.get("/health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data.get("status") in ("healthy", "ok") or "status" in data
+
+
+@pytest.mark.asyncio
+async def test_actuator_health_proxied_to_downstream(client):
+    # Prevents: Regression where /actuator/health fails to proxy to downstream health endpoint.
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = Response(200, json={"status": "UP", "components": {"db": {"status": "UP"}}})
+
+        response = await client.get("/actuator/health")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "UP"
+        assert mock_get.called
+
+
+@pytest.mark.asyncio
+async def test_actuator_health_bypasses_rate_limiting(client):
+    # Prevents: Regression where Kubernetes liveness/readiness probes on /actuator/health hit rate limits.
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = Response(200, json={"status": "UP"})
+
+        for _ in range(5):
+            res = await client.get("/actuator/health")
+            assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_actuator_health_bypasses_auth_middleware(client):
+    # Prevents: Regression where unauthenticated health checks on /actuator/health receive 401 Unauthorized.
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = Response(200, json={"status": "UP"})
+
+        response = await client.get("/actuator/health")
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "UP"}

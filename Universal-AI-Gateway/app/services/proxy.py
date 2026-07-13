@@ -19,13 +19,23 @@ from app.services.request_logger import RequestLogger
 
 logger = logging.getLogger(__name__)
 
-# Module-level httpx.AsyncClient for connection pooling (Step 2.httpx)
-_client = httpx.AsyncClient()
+_client: Optional[httpx.AsyncClient] = None
+
+
+def get_proxy_client() -> httpx.AsyncClient:
+    """Get or initialize the pooled HTTP async client."""
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient()
+    return _client
 
 
 async def close_proxy_client():
     """Close the proxy HTTP client."""
-    await _client.aclose()
+    global _client
+    if _client:
+        await _client.aclose()
+        _client = None
 
 
 async def forward_request(
@@ -110,7 +120,8 @@ async def forward_request(
 
     try:
         # Build request to forward
-        req = _client.build_request(
+        client = get_proxy_client()
+        req = client.build_request(
             method=request.method,
             url=upstream_url,
             headers=headers,
@@ -120,7 +131,7 @@ async def forward_request(
         )
 
         # Stream response
-        r = await _client.send(req, stream=True)
+        r = await client.send(req, stream=True)
         status_code = r.status_code
 
         # Exclude hop-by-hop response headers
@@ -168,18 +179,22 @@ async def forward_request(
         )
 
     except httpx.TimeoutException as exc:
+        logger.exception("Proxy timeout error")
         status_code = 504
         error_status = "UPSTREAM_TIMEOUT"
         error_message = f"Upstream service did not respond within {route.timeout_seconds}s"
     except httpx.ConnectError as exc:
+        logger.exception("Proxy connect error")
         status_code = 503
         error_status = "UPSTREAM_UNAVAILABLE"
         error_message = "Upstream service is unreachable"
     except httpx.HTTPError as exc:
+        logger.exception("Proxy HTTP error")
         status_code = 502
         error_status = "UPSTREAM_ERROR"
         error_message = f"HTTP error occurred while calling upstream: {exc}"
     except Exception as exc:
+        logger.exception("Proxy unhandled exception")
         status_code = 502
         error_status = "UPSTREAM_ERROR"
         error_message = f"An unhandled proxy error occurred: {exc}"

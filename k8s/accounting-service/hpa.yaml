@@ -1,0 +1,46 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ftgo-accounting-service-hpa
+  namespace: ftgo
+  labels:
+    app: ftgo-accounting-service
+    component: accounting
+    managed-by: kubectl
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ftgo-accounting-service
+  minReplicas: 2   # HA: always at least 2 replicas
+  maxReplicas: 8   # Scale up to 8 during peak order volumes
+  metrics:
+    # Scale on CPU — primary driver for Kafka consumer processing
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # Scale on Memory — JVM heap pressure indicator
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    # Scale up fast to avoid Kafka consumer lag accumulation
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    # Scale down slowly to avoid flapping
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120

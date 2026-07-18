@@ -1,0 +1,114 @@
+services:
+  restaurant-service:
+    build:
+      context: ./restaurant-service
+      dockerfile: Dockerfile
+    image: ftgo/restaurant-service:local
+    container_name: restaurant-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:postgresql://restaurant-postgres:5432/restaurant_db
+      SPRING_DATASOURCE_USERNAME: restaurant_user
+      SPRING_DATASOURCE_PASSWORD: restaurant_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MENU_UPDATED_TOPIC: restaurant.menu.updated
+      JAVA_OPTS: -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError
+    ports:
+      - "8081:8081"
+    depends_on:
+      restaurant-postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    restart: unless-stopped
+
+  kitchen-service:
+    build:
+      context: ./kitchen-service
+      dockerfile: Dockerfile
+    image: ftgo/kitchen-service:local
+    container_name: kitchen-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8082
+      SPRING_DATASOURCE_URL: jdbc:postgresql://kitchen-postgres:5432/kitchen_db
+      SPRING_DATASOURCE_USERNAME: kitchen_user
+      SPRING_DATASOURCE_PASSWORD: kitchen_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KITCHEN_KAFKA_GROUP_ID: kitchen-service
+      ORDER_CREATED_TOPIC: order.created
+      MENU_UPDATED_TOPIC: restaurant.menu.updated
+      TICKET_EVENTS_TOPIC: kitchen.ticket.events
+      JAVA_OPTS: -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError
+    ports:
+      - "8082:8082"
+    depends_on:
+      kitchen-postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    restart: unless-stopped
+
+  restaurant-postgres:
+    image: postgres:16-alpine
+    container_name: restaurant-postgres
+    environment:
+      POSTGRES_DB: restaurant_db
+      POSTGRES_USER: restaurant_user
+      POSTGRES_PASSWORD: restaurant_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - restaurant_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U restaurant_user -d restaurant_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kitchen-postgres:
+    image: postgres:16-alpine
+    container_name: kitchen-postgres
+    environment:
+      POSTGRES_DB: kitchen_db
+      POSTGRES_USER: kitchen_user
+      POSTGRES_PASSWORD: kitchen_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - kitchen_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kitchen_user -d kitchen_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: ftgo-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:29092,PLAINTEXT_HOST://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+volumes:
+  restaurant_postgres_data:
+  kitchen_postgres_data:
+  kafka_data:

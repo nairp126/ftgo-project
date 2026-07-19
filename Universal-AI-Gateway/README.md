@@ -1,124 +1,208 @@
-<div align="center">
+# Universal AI Gateway
 
-# 🌌 Universal LLM Gateway
-
-**A production-grade, enterprise-ready unified API for multiple LLM providers.**
-
-[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Redis](https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
-[![Postgres](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-005571?style=for-the-badge&logo=opentelemetry)](https://opentelemetry.io/)
+> **Owner:** Pranav Nair ([@nairp126](https://github.com/nairp126))  
+> **Part of:** FTGO Microservices Deployment — DevOps Course Project
 
 ---
 
-### *Seamlessly bridge the gap between your apps and OpenAI, Anthropic, Google Gemini & AWS Bedrock.*
+## What This Service Does
 
-[**Explore Technical Docs**](docs/README.md) • [**Usage Guide**](docs/USAGE_GUIDE.md) • [**API Reference**](docs/API_REFERENCE.md)
+The **Universal AI Gateway** serves as the primary edge ingress gateway for the entire FTGO microservice platform and enterprise LLM infrastructure. It provides edge authentication (API Key & PyJWT validation), per-tenant distributed rate limiting (Redis token bucket), header sanitization, correlation ID generation, financial budgeting, and intelligent reverse-proxy routing.
 
-</div>
-
----
-
-## ✨ Key Features
-
-- 🛠️ **Unified API Interface**: Single OpenAI-compatible endpoint for all your LLM needs.
-- 🚀 **Model Ensembling**: Concurrent model execution ("Racing") to guarantee speed and reliability.
-- 🧠 **Semantic Caching**: Intelligent vector similarity search powered by RediSearch.
-- 🛡️ **Prompt Safety Shield**: Real-time protection against malicious prompt injections.
-- 💰 **Financial Budgeting**: Tenant-level daily USD spend limits and live cost tracking.
-- 🚥 **Distributed Resilience**: Circuit breaker patterns to isolate vendor outages.
-- 📊 **Observability Core**: Built-in OpenTelemetry tracing, Prometheus metrics, and structured JSON logs.
-- 🔑 **Enterprise Security**: Argon2id key hashing, constant-time authentication, and PII redaction.
-- 🎛️ **Admin Suite**: Interactive CLI and REST Admin API for tenant/key lifecycle and real-time statistics.
+All incoming client traffic enters through this gateway. Requests prefixed with `/v1/chat/completions` are handled by the unified LLM routing & semantic caching engine, while domain API requests prefixed with `/api/*` are dynamically forwarded downstream to the internal **FTGO API Gateway** (`ftgo-api-gateway:8080`).
 
 ---
 
-## 🛠️ Quick Start
+## Domain Responsibilities
 
-### 1. Prerequisites
+**Owns:**
+- Tenant identity & multi-tenancy management (`tenants` table)
+- API Key lifecycle & secure hashing (`api_keys` table)
+- Request audit logging & observability metrics (`request_logs` table)
+- Semantic vector cache & exact response caching (Redis / RediSearch)
+- Daily USD financial spend limits (`BudgetManager`)
+- Dynamic edge reverse-proxy route table (`proxy_config.py`)
 
-Ensure you have **Docker** and **Docker Compose** installed.
+**Does NOT own (and never reads directly):**
+- Domain microservice databases (`orders`, `kitchen`, `restaurants`, `accounting`, `consumers`, `order_history`)
+- Asynchronous Saga orchestration logic (owned by Order Service)
+- CQRS read projections (owned by Order History Service)
 
-### 2. Launching the Stack
+---
 
-The gateway comes pre-configured with a full observability and database stack.
+## API Endpoints
+
+| Method | Path | Description | Access Control | Downstream Target |
+|--------|------|-------------|----------------|-------------------|
+| `POST` | `/v1/chat/completions` | Unified OpenAI-compatible LLM completion endpoint | API Key / JWT | LLM Provider Adapters (OpenAI, Anthropic, Gemini, Bedrock) |
+| `ANY` | `/api/orders/*` | Reverse proxied Order Service endpoints | API Key / JWT | `http://ftgo-api-gateway:8080/orders/*` |
+| `ANY` | `/api/kitchen/*` | Reverse proxied Kitchen Service endpoints | API Key / JWT | `http://ftgo-api-gateway:8080/kitchen/*` |
+| `ANY` | `/api/restaurants/*` | Reverse proxied Restaurant Service endpoints | API Key / JWT | `http://ftgo-api-gateway:8080/restaurants/*` |
+| `ANY` | `/api/accounting/*` | Reverse proxied Accounting Service endpoints | API Key / JWT | `http://ftgo-api-gateway:8080/accounting/*` |
+| `ANY` | `/api/consumers/*` | Reverse proxied Consumer Service endpoints | API Key / JWT | `http://ftgo-api-gateway:8080/consumers/*` |
+| `ANY` | `/api/order-history/*` | Reverse proxied Order History Service endpoints | API Key / JWT | `http://ftgo-api-gateway:8080/order-history/*` |
+| `GET` | `/health` | Gateway local liveness & readiness health probe | Public | Local FastAPI handler |
+| `GET` | `/actuator/health` | Proxied downstream Spring Boot health probe | Public | `http://ftgo-api-gateway:8080/actuator/health` |
+
+All domain API endpoints are accessed externally through this gateway at `/api/[service]/`. Do not bypass the gateway to call internal microservice ports directly in production.
+
+---
+
+## Kafka Events
+
+### Edge Gateway Architecture
+The Universal AI Gateway operates exclusively as a high-performance synchronous Edge HTTP/gRPC reverse proxy and router.
+
+- **Publishes:** `N/A` (Edge gateway does not publish directly to Kafka to preserve low latency).
+- **Consumes:** `N/A` (Kafka event streaming is handled downstream by microservices for Saga orchestration and CQRS replication).
+
+---
+
+## Database Schema
+
+**Database:** PostgreSQL (Metadata & Audit Logs) & Redis (Rate Limiting & Semantic Cache)  
+**Local Ports:** `5432` (Postgres), `6379` (Redis)
+
+### Key PostgreSQL Tables
+
+```sql
+-- Tenants table
+CREATE TABLE tenants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    daily_cost_limit DECIMAL(10, 4) DEFAULT 100.0000,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- API Keys table
+CREATE TABLE api_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    key_hash VARCHAR(255) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Request Logs table
+CREATE TABLE request_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    api_key_id UUID REFERENCES api_keys(id),
+    tenant_id UUID REFERENCES tenants(id),
+    model VARCHAR(255) NOT NULL,
+    prompt_tokens INT DEFAULT 0,
+    completion_tokens INT DEFAULT 0,
+    total_cost DECIMAL(10, 6) DEFAULT 0.000000,
+    latency_ms FLOAT NOT NULL,
+    status_code INT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## Local Development
+
+### Prerequisites
+
+- Python 3.12+
+- Docker & Docker Compose
+- Virtualenv setup (`.venv`)
+
+### Run Gateway in Isolation
 
 ```bash
-# Clone and enter the project
-git clone <repository-url>
 cd Universal-AI-Gateway
 
-# Start everything
-docker-compose up -d
+# Activate virtual environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt -r requirements-dev.txt
+
+# Start FastAPI server locally
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 3. Verification
-
-Check if the gateway is running:
+### Run via Docker Compose (Recommended)
 
 ```bash
-curl http://localhost:8000/health
+# From repository root — brings up gateway, redis, postgres, and downstream services
+docker compose up universal-ai-gateway
+```
+
+### Run Integration Tests
+
+```bash
+cd Universal-AI-Gateway
+
+# Run full Phase 5 integration suite
+.venv/Scripts/pytest tests/test_proxy.py -v
+
+# Run with code coverage report
+.venv/Scripts/pytest tests/test_proxy.py -v --cov=app.services.proxy --cov=app.core.proxy_config --cov-report=term-missing
 ```
 
 ---
 
-## 🏗️ Architecture at a Glance
+## Kubernetes Manifests
 
-The gateway follows a **Domain-Driven Design (DDD)** approach, optimized for high throughput and low latency.
+Located in `k8s/gateway/` and `k8s/ingress/`:
 
-```mermaid
-graph LR
-    User[Client App] --> GW[Universal Gateway]
-    subgraph "Enterprise Shield"
-        GW --> Auth[Auth & Security]
-        Auth --> Guard[Guardrails & Safety]
-    end
-    subgraph "Intelligence Layer"
-        Guard --> Cache[Semantic & Exact Cache]
-        Cache --> Router[Routing & Ensembling]
-    end
-    Router --> OAI[OpenAI]
-    Router --> ANT[Anthropic]
-    Router --> GEM[Google Gemini]
-    Router --> AWS[AWS Bedrock]
+| File | Purpose |
+|------|---------|
+| `deployment.yaml` | Pod specification, 2 replicas, CPU/memory limits, `/health` probes |
+| `service.yaml` | `ClusterIP` service routing port 80 to container port 8000 |
+| `configmap.yaml` | Non-sensitive configurations (`LOG_LEVEL`, `DOWNSTREAM_URL`, `CACHE_BYPASS_PATHS`) |
+| `secret.yaml` | Opaque base64 secrets (`DATABASE_URL`, `REDIS_URL`, `JWT_SECRET_KEY`, AWS keys) |
+| `ingress.yaml` | AWS ALB Ingress controller routing external internet traffic |
+
+### Deploy Manually
+
+```bash
+kubectl apply -f k8s/gateway/ -n ftgo
+kubectl apply -f k8s/ingress/ -n ftgo
+kubectl rollout status deployment/universal-ai-gateway -n ftgo
 ```
 
 ---
 
-## 📚 Documentation Portal
+## CI/CD Pipeline
 
-We maintain an exhaustive documentation suite covering every aspect of the project:
+**File:** `.github/workflows/gateway.yml`
 
-- 🏗️ **[Architectural Deep-Dive](docs/ARCHITECTURAL_OVERVIEW.md)**: Request lifecycles and sequence diagrams.
-- 📂 **[Codebase Map](docs/CODEBASE_MAP.md)**: Detailed technical summaries for every file and folder.
-- 🚀 **[Enterprise Feature Guide](docs/ENTERPRISE_FEATURES.md)**: How Semantic Caching and Ensembling work.
-- 🛡️ **[Security Model](docs/SECURITY_MODEL.md)**: Threat mitigation and encryption standards.
-- 🛠️ **[Development](docs/DEVELOPMENT_GUIDE.md) & [Deployment](docs/DEPLOYMENT_GUIDE.md)**: Guides for engineers and devops professionals.
+Triggers automatically on push or pull request to `main`, `dev`, or `feat/gateway` when files in `Universal-AI-Gateway/`, `k8s/gateway/`, or `k8s/ingress/` are modified.
 
----
-
-## 🚥 Monitoring & Observability
-
-- **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Distributed Tracing (Jaeger)**: [http://localhost:16686](http://localhost:16686)
-- **Metrics (Prometheus)**: [http://localhost:8000/metrics](http://localhost:8000/metrics)
+**Pipeline Steps:**
+1. Install Python dependencies (`requirements.txt` & `requirements-dev.txt`)
+2. Execute automated integration test suite (`pytest tests/test_proxy.py`)
+3. Build multi-arch Docker container image
+4. Push image to Amazon ECR tagged with Git commit SHA
+5. Roll out updated manifests to AWS EKS `ftgo` namespace
 
 ---
 
-## 🏢 Enterprise Support
+## Architecture Decision Record
 
-The Universal LLM Gateway is designed for large-scale deployments requiring high-availability, cost-control, and centralized security.
-
-- **Zero-Trust**: Every request is authenticated and authorized.
-- **Cost Efficiency**: Semantic caching can reduce provider bills by up to 80% for repetitive workloads.
-- **Compliance**: Structured logging and PII redaction ensure your data handling meets regulatory standards.
+See [`docs/adr/ADR-001-api-gateway.md`](../docs/adr/ADR-001-api-gateway.md) for full architectural design decisions — including the two-layer gateway rationale, JWT identity forwarding headers (`X-User-ID`, `X-Tenant-ID`, `X-User-Roles`), and zero-trust edge security model.
 
 ---
 
-<div align="center">
+## Key Interview / Viva Questions
 
-Developed with ❤️ for the AI community.
-**[Contributing](CONTRIBUTING.md)** • **[Code of Conduct](CODE_OF_CONDUCT.md)** • **[License](LICENSE)** • **[Report a Bug](.github/ISSUE_TEMPLATE/bug_report.md)** • **[Request a Feature](.github/ISSUE_TEMPLATE/feature_request.md)**
+Be prepared to answer these technical questions:
 
-</div>
+1. **Why do we use a two-layer API Gateway architecture (Universal AI Gateway + FTGO API Gateway)?**
+   * *Answer:* The Universal AI Gateway operates at the edge for cross-cutting security, rate limiting, LLM semantic caching, and financial budgeting. The internal FTGO API Gateway handles internal path routing and Spring Cloud microservice composition without exposing core microservices to edge vulnerabilities.
+
+2. **How does the proxy preserve microservice database isolation?**
+   * *Answer:* The gateway routes requests dynamically using HTTP headers (`X-Tenant-ID`, `X-User-ID`) without touching or sharing database connections with downstream domain microservices.
+
+3. **Why do `/api/*` reverse proxy routes bypass semantic caching and daily USD budget checks?**
+   * *Answer:* Semantic caching and daily financial budget checks are designed for expensive, non-deterministic LLM prompts (`/v1/chat/completions`). Operational CRUD microservice requests are deterministic and must never be blocked by LLM budget depletion.
+
+4. **How are Kubernetes liveness/readiness probes handled for `/actuator/health` and `/health`?**
+   * *Answer:* The gateway middleware explicitly exempts health check paths (`/health`, `/actuator/health`) from rate limiting and authentication checks to prevent Kubernetes load balancer probes from failing under high traffic.
+
+5. **How does header handling work during request forwarding?**
+   * *Answer:* Sensitive inbound credentials (`Authorization`, `X-API-Key`, `Cookie`) are stripped before forwarding downstream, while verified claims (`X-User-ID`, `X-Tenant-ID`, `X-User-Roles`, `X-Correlation-ID`) are injected into the downstream request headers.

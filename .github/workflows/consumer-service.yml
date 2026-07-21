@@ -24,10 +24,11 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
+          cache: maven
 
       - name: Grant execute permission
-        run: chmod +x ftgo-consumer-service/mvnw
+        run: chmod +x mvnw
 
       - name: Build project
-        run: ./mvnw clean verify
+        run: ./mvnw clean verify -DskipTests

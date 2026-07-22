@@ -59,18 +59,18 @@ jobs:
 
       # ── Lint / static analysis ────────────────────────────────────────────
       - name: Lint — Checkstyle
-        run: ./mvnw checkstyle:check -B --no-transfer-progress
+        run: mvn checkstyle:check -B --no-transfer-progress
         # Note: Checkstyle plugin should be configured in pom.xml.
         # Skip with 'continue-on-error: true' until rules are agreed across team.
         continue-on-error: true
 
       # ── Compile ───────────────────────────────────────────────────────────
       - name: Compile
-        run: ./mvnw compile -B --no-transfer-progress
+        run: mvn compile -B --no-transfer-progress
 
       # ── Unit tests ────────────────────────────────────────────────────────
       - name: Run unit tests
-        run: ./mvnw test -B --no-transfer-progress
+        run: mvn test -B --no-transfer-progress
         env:
           # Override Kafka/DB settings — unit tests use H2/embedded Kafka
           SPRING_PROFILES_ACTIVE: test
@@ -93,7 +93,7 @@ jobs:
 
       # ── Package (JAR) — only if tests pass ────────────────────────────────
       - name: Package JAR
-        run: ./mvnw package -DskipTests -B --no-transfer-progress
+        run: mvn package -DskipTests -B --no-transfer-progress
 
       # Cache the JAR for the docker-build job
       - name: Upload JAR artifact

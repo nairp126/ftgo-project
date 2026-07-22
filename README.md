@@ -33,30 +33,30 @@ deploying to AWS EKS in the `ap-south-1` (Mumbai) region.
 
 ### What we built
 
-| Component | Technology | Owner |
-|-----------|-----------|-------|
-| Order Service | Java / Spring Boot | [Person 1] |
-| Kitchen Service | Java / Spring Boot | [Person 2] |
-| Restaurant Service | Java / Spring Boot | [Person 2] |
-| Accounting Service | Java / Spring Boot | [Person 3] |
-| Consumer Service | Java / Spring Boot | [Person 4] |
-| Order History Service | Java / Spring Boot | [Person 4] |
-| Universal AI Gateway (Edge) | Python / FastAPI | [Person 5] |
-| FTGO API Gateway (Internal) | Java / Spring Cloud Gateway | [Person 5] |
-| Kubernetes Platform | AWS EKS | All |
-| CI/CD Pipelines | GitHub Actions | Each person |
+| Component | Technology | Owner | GitHub |
+|-----------|-----------|-------|--------|
+| Order Service | Java / Spring Boot | Kinjal Srivastava | [@kinjalsrivastava](https://github.com/kinjalsrivastava) |
+| Kitchen Service | Java / Spring Boot | Vikrant Rana | [@vikrantrana](https://github.com/vikrantrana) |
+| Restaurant Service | Java / Spring Boot | Vikrant Rana | [@vikrantrana](https://github.com/vikrantrana) |
+| Accounting Service | Java / Spring Boot | Anirudh Chawla | [@anirudhchawla](https://github.com/anirudhchawla) |
+| Consumer Service | Java / Spring Boot | Anshuman | [@anshuman](https://github.com/anshuman) |
+| Order History Service | Java / Spring Boot | Anshuman | [@anshuman](https://github.com/anshuman) |
+| Universal AI Gateway (Edge) | Python / FastAPI | Pranav Nair | [@nairp126](https://github.com/nairp126) |
+| FTGO API Gateway (Internal) | Java / Spring Cloud Gateway | Pranav Nair | [@nairp126](https://github.com/nairp126) |
+| Kubernetes Platform | AWS EKS | All | - |
+| CI/CD Pipelines | GitHub Actions | Each person | - |
 
 ---
 
 ## Team
 
-| Name | Role | Services Owned |
-|------|------|---------------|
-| [Person 1] | Order Service Lead | Order Service |
-| [Person 2] | Kitchen Lead | Kitchen Service, Restaurant Service |
-| [Person 3] | Accounting Lead | Accounting Service |
-| [Person 4] | Consumer Lead | Consumer Service, Order History Service |
-| [Person 5] | Platform & Gateway Lead | Universal AI Gateway, FTGO API Gateway, Kubernetes Platform |
+| Name | Role | Services Owned | GitHub |
+|------|------|---------------|--------|
+| Kinjal Srivastava | Order Service Lead | Order Service | [@kinjalsrivastava](https://github.com/kinjalsrivastava) |
+| Vikrant Rana | Kitchen Lead | Kitchen Service, Restaurant Service | [@vikrantrana](https://github.com/vikrantrana) |
+| Anirudh Chawla | Accounting Lead | Accounting Service | [@anirudhchawla](https://github.com/anirudhchawla) |
+| Anshuman | Consumer Lead | Consumer Service, Order History Service | [@anshuman](https://github.com/anshuman) |
+| Pranav Nair | Platform & Gateway Lead | Universal AI Gateway, FTGO API Gateway, Kubernetes Platform | [@nairp126](https://github.com/nairp126) |
 
 ---
 

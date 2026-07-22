@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-history-service
+  labels:
+    app: order-history-service
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: order-history-service
+
+  template:
+    metadata:
+      labels:
+        app: order-history-service
+
+    spec:
+      containers:
+        - name: order-history-service
+          image: ftgo-order-history-service:latest
+          imagePullPolicy: Never
+
+          ports:
+            - containerPort: 8082
+
+          envFrom:
+            - configMapRef:
+                name: order-history-config
+
+          env:
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "password"
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

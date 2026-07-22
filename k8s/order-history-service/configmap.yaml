@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-history-config
+
+data:
+  SPRING_DATASOURCE_URL: jdbc:postgresql://order-history-db:5432/order_history_db
+  SPRING_DATASOURCE_USERNAME: anshumanrangarh

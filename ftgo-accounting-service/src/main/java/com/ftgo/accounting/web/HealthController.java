@@ -1,21 +1,20 @@
 package com.ftgo.accounting.web;
 
+import java.time.Instant;
+import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Instant;
-import java.util.Map;
-
 /**
  * Custom health check endpoints for Kubernetes liveness and readiness probes.
  *
- * <p>Spring Boot Actuator also exposes {@code /actuator/health} (liveness) and
- * {@code /actuator/health/readiness}, but providing explicit REST endpoints gives
- * Kubernetes probe configuration more flexibility (e.g. separate paths per probe type).
+ * <p>Spring Boot Actuator exposes /actuator/health (liveness) and
+ * /actuator/health/readiness, but providing explicit REST endpoints gives
+ * Kubernetes probe configuration more flexibility.
  *
- * <p>Kubernetes probe config in {@code deployment.yaml}:
+ * <p>Kubernetes probe config in deployment.yaml:
  * <pre>
  *   livenessProbe:
  *     httpGet:
@@ -32,8 +31,10 @@ import java.util.Map;
 public class HealthController {
 
     /**
-     * Liveness probe — returns 200 if the application process is running and not deadlocked.
+     * Liveness probe returns 200 if the application process is running.
      * Kubernetes will restart the pod if this endpoint fails.
+     *
+     * @return map containing status UP and timestamp
      */
     @GetMapping("/live")
     public ResponseEntity<Map<String, Object>> liveness() {
@@ -45,7 +46,7 @@ public class HealthController {
     }
 
     /**
-     * Readiness probe — returns 200 if the service is ready to accept traffic.
+     * Readiness probe returns 200 if the service is ready to accept traffic.
      * Kubernetes will remove the pod from the load balancer if this fails.
      *
      * <p>In a production implementation this would additionally check:
@@ -53,8 +54,9 @@ public class HealthController {
      *   <li>Database connectivity</li>
      *   <li>Kafka broker reachability</li>
      * </ul>
-     * For now it delegates to the application being up (Spring Actuator readiness
-     * checks handle the deeper dependency checks via {@code management.health.*}).
+     * For now it delegates to the application being up.
+     *
+     * @return map containing status READY and timestamp
      */
     @GetMapping("/ready")
     public ResponseEntity<Map<String, Object>> readiness() {

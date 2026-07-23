@@ -45,6 +45,10 @@ jobs:
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
     defaults:
       run:
         working-directory: ftgo-accounting-service

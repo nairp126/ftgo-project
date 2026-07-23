@@ -1,26 +1,19 @@
-# ─── Stage 1: Build ───────────────────────────────────────────────────────────
-# Uses the full JDK image to compile and package the application.
+# ─── Stage 1: Layer extraction ────────────────────────────────────────────────
+# The JAR is pre-built by the CI pipeline (mvn package) and passed in via
+# the Docker build context (ftgo-accounting-service/target/*.jar).
+# We use layertools to split it into cache-friendly layers.
 FROM eclipse-temurin:17-jdk-alpine AS builder
 
 WORKDIR /workspace
 
-# Copy Maven wrapper and POM first (layer caching: only re-download deps if pom.xml changes)
-COPY pom.xml .
-COPY .mvn/ .mvn/
-COPY mvnw .
-
-# Download dependencies (cached layer)
-RUN chmod +x ./mvnw && ./mvnw dependency:go-offline -B
-
-# Copy source and build (skip tests; they run in CI)
-COPY src/ src/
-RUN ./mvnw package -DskipTests -B
+# Copy the pre-built JAR from CI artifact (downloaded by the workflow)
+COPY target/*.jar app.jar
 
 # Extract layered JAR for optimised container image layers
-RUN java -Djarmode=layertools -jar target/*.jar extract
+RUN java -Djarmode=layertools -jar app.jar extract
 
 # ─── Stage 2: Runtime ─────────────────────────────────────────────────────────
-# Uses slim JRE image — no compiler, smaller attack surface (PCI compliance benefit).
+# Uses slim JRE image — no compiler, smaller attack surface (PCI compliance).
 FROM eclipse-temurin:17-jre-alpine AS runtime
 
 # Non-root user for security hardening (PCI DSS requirement: least privilege)
@@ -29,7 +22,7 @@ USER ftgo
 
 WORKDIR /app
 
-# Copy layered JAR contents in order of changefrequency (cache-friendly)
+# Copy layered JAR contents in order of change frequency (cache-friendly)
 COPY --from=builder --chown=ftgo:ftgo /workspace/dependencies/ ./
 COPY --from=builder --chown=ftgo:ftgo /workspace/spring-boot-loader/ ./
 COPY --from=builder --chown=ftgo:ftgo /workspace/snapshot-dependencies/ ./
@@ -38,7 +31,7 @@ COPY --from=builder --chown=ftgo:ftgo /workspace/application/ ./
 # Expose application port
 EXPOSE 8080
 
-# JVM tuning for containers: respect cgroup memory limits, enable GC logging
+# JVM tuning for containers: respect cgroup memory limits, enable G1GC
 ENV JAVA_OPTS="-XX:+UseContainerSupport \
                -XX:MaxRAMPercentage=75.0 \
                -XX:+UseG1GC \

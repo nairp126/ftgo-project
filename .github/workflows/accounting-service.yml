@@ -9,6 +9,8 @@ on:
   push:
     branches:
       - main
+      - dev
+      - 'Accounting-Service'
       - 'feature/**'
       - 'fix/**'
     paths:
@@ -18,6 +20,7 @@ on:
   pull_request:
     branches:
       - main
+      - dev
     paths:
       - 'ftgo-accounting-service/**'
       - 'k8s/accounting-service/**'

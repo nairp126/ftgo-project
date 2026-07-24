@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: ftgo-accounting-service
+
+  # ── Database (database-per-service: Accounting's own Postgres) ─────────────
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ftgo_accounting}
+    username: ${DB_USERNAME:ftgo_accounting}
+    password: ${DB_PASSWORD:changeme}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update}        # use 'validate' in production with Flyway
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # ── Kafka ──────────────────────────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ftgo-accounting-service
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.ftgo.*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+
+# ── Server ────────────────────────────────────────────────────────────────────
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful  # allow in-flight requests to complete on pod termination
+
+# ── Actuator (k8s health probes) ──────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+
+# ── FTGO application properties ───────────────────────────────────────────────
+ftgo:
+  kafka:
+    topics:
+      order-created: order.created
+      payment-authorized: payment.authorized
+      payment-failed: payment.failed
+    max-retries: ${KAFKA_MAX_RETRIES:3}
+    retry-interval-ms: ${KAFKA_RETRY_INTERVAL_MS:1000}
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.ftgo.accounting: INFO
+    org.springframework.kafka: WARN
+    org.hibernate.SQL: WARN

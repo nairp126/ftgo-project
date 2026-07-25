@@ -183,3 +183,14 @@ PostgreSQL Database
 - DeliveryCompleted
 
 ---
+# Progress
+
+- [x] Consumer Service
+- [x] Docker
+- [x] Kubernetes
+- [x] GitHub Actions
+- [x] ADR-005
+- [ ] Order History Service
+- [ ] Order History Docker
+- [ ] Order History Kubernetes
+- [ ] Order History CI/CD

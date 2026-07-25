@@ -3,7 +3,11 @@ name: Restaurant Service CI/CD
 on:
   push:
     branches:
-      - main
+    - main
+    - dev
+    - Kitchen-Restaurant-Service
+    - 'feature/**'
+    - 'fix/**'
     paths:
       - "restaurant-service/**"
       - "k8s/restaurant-service/**"
@@ -11,6 +15,7 @@ on:
   pull_request:
     branches:
       - main
+      - dev
     paths:
       - "restaurant-service/**"
       - "k8s/restaurant-service/**"

@@ -1,0 +1,136 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ftgo-accounting-service
+  namespace: ftgo
+  labels:
+    app: ftgo-accounting-service
+    component: accounting
+    managed-by: kubectl
+    version: "0.1.0"
+  annotations:
+    # Deployment reason for audit trail
+    deployment.kubernetes.io/reason: "Initial deployment of Accounting Service"
+spec:
+  replicas: 2   # Minimum HA — HPA will scale beyond this
+  selector:
+    matchLabels:
+      app: ftgo-accounting-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0   # Zero-downtime rolling updates
+  template:
+    metadata:
+      labels:
+        app: ftgo-accounting-service
+        component: accounting
+        version: "0.1.0"
+      annotations:
+        # Force pod restart when ConfigMap changes (hash annotation updated by CI)
+        checksum/config: "{{ .Values.configChecksum }}"
+    spec:
+      # Graceful shutdown: allow 60s for in-flight requests to complete
+      terminationGracePeriodSeconds: 60
+
+      # Security context (PCI hardening): run as non-root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+
+      # Spread replicas across nodes for HA
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - ftgo-accounting-service
+                topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: ftgo-accounting-service
+          image: ghcr.io/ftgo/ftgo-accounting-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # ── Environment: non-sensitive config from ConfigMap ────────────────
+          envFrom:
+            - configMapRef:
+                name: ftgo-accounting-service-config
+
+          # ── Environment: sensitive config from Secret ───────────────────────
+          env:
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ftgo-accounting-service-secret
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ftgo-accounting-service-secret
+                  key: DB_PASSWORD
+
+          # ── Resource limits (right-sized for Spring Boot + Kafka consumer) ──
+          resources:
+            requests:
+              cpu: "250m"       # 0.25 cores — adequate for Kafka consumer + REST
+              memory: "512Mi"   # Spring Boot baseline + JVM heap
+            limits:
+              cpu: "1000m"      # Allow burst to 1 core
+              memory: "1Gi"     # Hard cap — prevents OOMKill cascade
+
+          # ── Liveness probe — restart if deadlocked ─────────────────────────
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+
+          # ── Readiness probe — remove from LB until ready ───────────────────
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # ── Startup probe — give time for JVM + Spring context ─────────────
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 12       # up to 120s total startup time
+
+          # ── Container security hardening ───────────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          # ── Writable volume for Spring Boot temp files ─────────────────────
+          volumeMounts:
+            - name: tmp-dir
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp-dir
+          emptyDir: {}

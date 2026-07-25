@@ -1,0 +1,69 @@
+# Universal LLM Gateway
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.hypothesis/
+htmlcov/
+.coverage
+*.cover
+coverage.xml
+
+# Distribution
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Docker
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+gateway_logs.json
+
+# Scratch / E2E Testing
+e2e_results_*.txt
+e2e_results_debug.txt
+
+# Tool-specific
+.kiro/
+.agent/
+.agents/
+_agent/
+_agents/
+.gemini/
+AGENTS.md
+GEMINI.md
+detailed_audit_report.md
+detailed_readiness_audit.md
+implementation_plan.md
+task.md
+walkthrough.md

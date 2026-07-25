@@ -1,0 +1,253 @@
+name: Accounting Service — CI/CD
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Triggers: run on push/PR to files owned by Person 3 (Accounting Service).
+# Does NOT run on changes to other services' code — prevents accidental
+# cross-service pipeline interference.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - 'Accounting-Service'
+      - 'feature/**'
+      - 'fix/**'
+    paths:
+      - 'ftgo-accounting-service/**'
+      - 'k8s/accounting-service/**'
+      - '.github/workflows/accounting-service.yml'
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'ftgo-accounting-service/**'
+      - 'k8s/accounting-service/**'
+      - '.github/workflows/accounting-service.yml'
+
+# Cancel in-progress runs on the same branch when a new push arrives
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/ftgo-accounting-service
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+  MAVEN_OPTS: '-Xmx1024m'
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 1: Build, Lint, and Test
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+    defaults:
+      run:
+        working-directory: ftgo-accounting-service
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: maven
+
+      # ── Lint / static analysis ────────────────────────────────────────────
+      - name: Lint — Checkstyle
+        run: mvn checkstyle:check -B --no-transfer-progress
+        # Note: Checkstyle plugin should be configured in pom.xml.
+        # Skip with 'continue-on-error: true' until rules are agreed across team.
+        continue-on-error: true
+
+      # ── Compile ───────────────────────────────────────────────────────────
+      - name: Compile
+        run: mvn compile -B --no-transfer-progress
+
+      # ── Unit tests ────────────────────────────────────────────────────────
+      - name: Run unit tests
+        run: mvn test -B --no-transfer-progress
+        env:
+          # Override Kafka/DB settings — unit tests use H2/embedded Kafka
+          SPRING_PROFILES_ACTIVE: test
+
+      # ── Test report ───────────────────────────────────────────────────────
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: ftgo-accounting-service/target/surefire-reports/**/*.xml
+
+      # ── Code coverage ─────────────────────────────────────────────────────
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-coverage-report
+          path: ftgo-accounting-service/target/site/jacoco/
+          retention-days: 7
+
+      # ── Package (JAR) — only if tests pass ────────────────────────────────
+      - name: Package JAR
+        run: mvn package -DskipTests -B --no-transfer-progress
+
+      # Cache the JAR for the docker-build job
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: accounting-service-jar
+          path: ftgo-accounting-service/target/*.jar
+          retention-days: 1
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 2: Build and Push Docker Image
+  # Runs only after build-and-test passes.
+  # ═══════════════════════════════════════════════════════════════════════════
+  docker-build-push:
+    name: Docker Build & Push
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # Required to push to GHCR
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.push.outputs.digest }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: accounting-service-jar
+          path: ftgo-accounting-service/target/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Image metadata / tags ──────────────────────────────────────────────
+      # Tag scheme:
+      #   main branch push  → :latest + :<git-sha>
+      #   PR                → :pr-<number>
+      #   feature branch    → :<branch-name>-<git-sha>
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=ref,event=branch
+            type=ref,event=pr
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      # ── Build and push ─────────────────────────────────────────────────────
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: ftgo-accounting-service/
+          file: ftgo-accounting-service/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}   # Don't push on PRs
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # SBOM and provenance for supply chain security
+          sbom: true
+          provenance: true
+
+      # ── Image vulnerability scan ───────────────────────────────────────────
+      - name: Scan image for vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          format: 'table'
+          exit-code: '1'          # Fail CI on CRITICAL CVEs
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true   # Non-blocking until baseline is established
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Job 3: Deploy to Kubernetes
+  # Runs only on pushes to main (not PRs), after image is built and pushed.
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: Deploy to Kubernetes
+    needs: docker-build-push
+    runs-on: ubuntu-latest
+    # Gate: only deploy from main branch
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://ftgo.example.com   # Update to real URL
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.29.0'
+
+      # Configure kubeconfig from repository secret
+      - name: Configure Kubernetes context
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      # Update the image tag in the deployment (image tag = git SHA)
+      - name: Update deployment image tag
+        run: |
+          IMAGE_TAG="sha-$(echo ${{ github.sha }} | head -c 7)"
+          kubectl set image deployment/ftgo-accounting-service \
+            ftgo-accounting-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG} \
+            -n ftgo
+
+      # Apply any manifest changes (ConfigMap, HPA, Service, etc.)
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/accounting-service/ -n ftgo
+
+      # Wait for rollout to complete (fails CI if pods don't become Ready)
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/ftgo-accounting-service \
+            -n ftgo \
+            --timeout=300s
+
+      # ── Smoke test ────────────────────────────────────────────────────────
+      - name: Smoke test — liveness probe
+        run: |
+          # Port-forward to the service and hit the health endpoint
+          kubectl run smoke-test \
+            --image=curlimages/curl:latest \
+            --restart=Never \
+            --rm \
+            -i \
+            --namespace ftgo \
+            -- curl -sf http://ftgo-accounting-service/health/live
+        continue-on-error: true   # Non-blocking smoke test

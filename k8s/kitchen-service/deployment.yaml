@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kitchen-service
+  namespace: ftgo
   labels:
     app: kitchen-service
     component: backend

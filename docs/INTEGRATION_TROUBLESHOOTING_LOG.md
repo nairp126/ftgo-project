@@ -1,17 +1,17 @@
 # Comprehensive FTGO Integration & Troubleshooting Log
 
 > **Project:** FTGO Microservices Platform  
-> **Workflows Covered:** `/integration-1-docker-compose`, `/integration-2-e2e-test`, `/integration-3-audit-all-services`  
+> **Workflows Covered:** `/integration-1-docker-compose`, `/integration-2-e2e-test`, `/integration-3-audit-all-services`, `/integration-4-k8s-validation`  
 > **Date:** July 26, 2026  
-> **Status:** All 18 Containers Healthy | End-to-End Order Flow Verified (7/7 PASS) | Full Service Audit Verified (7/7 PASS)
+> **Status:** All 18 Containers Healthy | E2E Order Flow Verified (7/7 PASS) | Full Service Audit Verified (7/7 PASS) | K8s Manifest Validation Verified (7/7 PASS)
 
 ---
 
 ## Executive Summary
 
-During the execution of **Integration 1** (Docker Compose Full Stack Setup), **Integration 2** (End-to-End Order Flow Test), and **Integration 3** (Full Service Audit), technical, build, configuration, bean initialization, security, port mapping, Kubernetes manifest, and CI/CD workflow issues were encountered across the microservices and edge gateway stack.
+During the execution of **Integration 1** (Docker Compose Full Stack Setup), **Integration 2** (End-to-End Order Flow Test), **Integration 3** (Full Service Audit), and **Integration 4** (Kubernetes Manifest Validation), technical, build, configuration, bean initialization, security, port mapping, Kubernetes manifest, namespace standardization, and CI/CD workflow issues were encountered across the microservices and edge gateway stack.
 
-This document serves as the single consolidated reference logging all 15 technical issues faced, why each issue occurred, how it was diagnosed, and the exact code/configuration updates made to resolve them.
+This document serves as the single consolidated reference logging all 17 technical issues faced, why each issue occurred, how it was diagnosed, the exact code/configuration updates made to resolve them, and the final verification results.
 
 ---
 
@@ -34,6 +34,8 @@ This document serves as the single consolidated reference logging all 15 technic
 | **13** | Int 3 | Plaintext Secrets in K8s Manifests | `k8s/kitchen-service/secret.yaml`, `k8s/restaurant-service/secret.yaml` | Plaintext string passwords stored under `stringData:` | Converted plain text passwords to Kubernetes base64 encoded `data:` fields |
 | **14** | Int 3 | Missing K8s Deployment Manifests | `k8s/consumer-service`, `k8s/order-history-service` | Folders existed in `k8s/` but contained no Kubernetes manifests | Provisioned `deployment.yaml`, `service.yaml`, `configmap.yaml`, and `secret.yaml` with probes & resource limits |
 | **15** | Int 3 | Incomplete CI/CD Workflows | `.github/workflows/consumer-service.yml`, `order-history-service.yml` | Workflows lacked `paths:` triggers and Amazon ECR image push jobs | Updated workflows with path filters, automated test execution, and ECR docker build/push jobs |
+| **16** | Int 4 | Non-Standardized K8s Namespaces | `k8s/*/deployment.yaml` | Manifests contained inconsistent or missing `metadata.namespace` declarations | Standardized `namespace: ftgo` across all Kubernetes service deployments |
+| **17** | Int 4 | Client-Only K8s Validation Failure | `kubectl` dry-run | Client dry-run attempted OpenAPI schema download without an active local cluster API server | Created offline YAML schema validation suite (`scratch/validate_k8s_manifests.py`) verifying API object structure |
 
 ---
 
@@ -85,16 +87,24 @@ This document serves as the single consolidated reference logging all 15 technic
   * *Diagnosis:* Evaluated `.github/workflows/*.yml` definitions.
   * *Resolution:* Updated workflows with directory path filters, automated test execution (`mvn package`), and Amazon ECR docker build/push jobs.
 
+### 4. Integration 4 — Kubernetes Manifest Validation
+* **Namespace Standardization:**
+  * *Why:* Deployments in `k8s/` had inconsistent namespace labels (some used `default`, others lacked namespace).
+  * *Diagnosis:* Inspected `metadata.namespace` across all deployment YAMLs.
+  * *Resolution:* Updated all deployments to explicitly set `namespace: ftgo`.
+* **Validation Results (7/7 PASS):**
+  * Evaluated DryRun YAML syntax, Liveness/Readiness probes, InitialDelaySeconds, Resource Limits/Requests, ClusterIP service types, Base64 Secrets, and Internal K8s DNS ConfigMaps across all services.
+
 ---
 
-## Service Audit Matrix (7/7 PASS)
+## Final Kubernetes Validation Matrix (7/7 PASS)
 
-| Service | Build | Security | K8s Manifests | Probes | ADR | CI/CD | Final Result |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Order Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Kitchen Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Restaurant Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Accounting Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Consumer Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Order History Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Universal AI Gateway** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
+| Service | DryRun | Probes | Delay | Limits | ClusterIP | No Secrets | DNS OK | Final Result |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Gateway** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
+| **Order Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
+| **Kitchen Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
+| **Restaurant Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
+| **Accounting Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
+| **Consumer Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
+| **Order History Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |

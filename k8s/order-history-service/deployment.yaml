@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ftgo-order-history-service
-  namespace: default
+  namespace: ftgo
   labels:
     app: order-history-service
     component: backend

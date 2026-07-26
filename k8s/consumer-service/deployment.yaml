@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ftgo-consumer-service
-  namespace: default
+  namespace: ftgo
   labels:
     app: consumer-service
     component: backend

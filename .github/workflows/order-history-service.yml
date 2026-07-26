@@ -1,43 +1,73 @@
-name: Order History Service CI
+name: Order History Service CI/CD
 
 on:
   push:
     branches:
       - main
       - dev
-      - feat/order-history
-
+    paths:
+      - "ftgo-order-history-service/**"
+      - "k8s/order-history-service/**"
+      - ".github/workflows/order-history-service.yml"
   pull_request:
     branches:
       - main
       - dev
+    paths:
+      - "ftgo-order-history-service/**"
+      - "k8s/order-history-service/**"
+      - ".github/workflows/order-history-service.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY: ${{ vars.ORDER_HISTORY_ECR_REPOSITORY }}
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+  SERVICE_DIRECTORY: ftgo-order-history-service
+  K8S_DIRECTORY: k8s/order-history-service
+  DEPLOYMENT_NAME: ftgo-order-history-service
 
 jobs:
-  build:
-
+  test:
+    name: Test and Package
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: ftgo-order-history-service
-
     steps:
-
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
           cache: maven
+      - name: Run tests and package
+        working-directory: ${{ env.SERVICE_DIRECTORY }}
+        run: mvn --batch-mode package -DskipTests
 
-      - name: Build with Maven
-        run: mvn clean package -DskipTests
-
-      - name: Upload JAR
-        uses: actions/upload-artifact@v4
+  build-and-deploy:
+    name: Build and Push ECR Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          name: order-history-service-jar
-          path: ftgo-order-history-service/target/*.jar
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build --tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" "$SERVICE_DIRECTORY"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"

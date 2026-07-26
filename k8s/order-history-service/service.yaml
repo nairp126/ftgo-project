@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ftgo-order-history-service
+  labels:
+    app: order-history-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app: order-history-service
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-history-service-config
+data:
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-history:5432/ftgo-order-history"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: order-history-service-secret
+type: Opaque
+data:
+  SPRING_DATASOURCE_PASSWORD: aGlzdG9yeV9wYXNzd29yZA==

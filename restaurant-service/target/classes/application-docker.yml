@@ -1,0 +1,25 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://restaurant-postgres:5432/restaurant_db}
+    username: ${SPRING_DATASOURCE_USERNAME:restaurant_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:restaurant_password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    open-in-view: false
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+
+app:
+  kafka:
+    menu-updated-topic: ${MENU_UPDATED_TOPIC:restaurant.menu.updated}

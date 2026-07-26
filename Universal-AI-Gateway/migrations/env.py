@@ -27,9 +27,9 @@ if config.config_file_name is not None:
 # MetaData object for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Override the sqlalchemy.url from app settings
+import os
 settings = get_settings()
-db_url = settings.database.url
+db_url = os.getenv("DATABASE_URL") or getattr(settings, "database_url", "postgresql+asyncpg://postgres:postgrespassword@postgres-gateway:5432/gateway")
 config.set_main_option("sqlalchemy.url", db_url)
 
 

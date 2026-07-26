@@ -60,6 +60,13 @@ FTGO_ROUTES: List[RouteConfig] = [
         methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
     ),
     RouteConfig(
+        prefix="/api/order-history",
+        upstream_url=UPSTREAM_BASE_URL,
+        strip_prefix=True,
+        timeout_seconds=10.0,
+        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+    ),
+    RouteConfig(
         prefix="/actuator/health",
         upstream_url=UPSTREAM_BASE_URL,
         strip_prefix=False,

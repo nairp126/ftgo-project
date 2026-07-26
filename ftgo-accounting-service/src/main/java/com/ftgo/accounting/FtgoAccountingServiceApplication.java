@@ -18,14 +18,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * that touches cardholder-adjacent data. Keeping it isolated minimises
  */
 @SpringBootApplication
-public final class FtgoAccountingServiceApplication {
-
-    /**
-     * Private constructor to prevent instantiation of utility class.
-     */
-    private FtgoAccountingServiceApplication() {
-        // Utility class
-    }
+public class FtgoAccountingServiceApplication {
 
     /**
      * Main method to start the Spring Boot application.

@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.support.converter.JsonMessageConverter;
 import org.springframework.kafka.listener.ContainerProperties;
 
@@ -18,9 +19,11 @@ public class KafkaConsumerConfig {
 
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory(
-            ConcurrentKafkaListenerContainerFactory<String, Object> factory,
+            ConsumerFactory<String, Object> consumerFactory,
             JsonMessageConverter jsonMessageConverter) {
 
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory);
         factory.setRecordMessageConverter(jsonMessageConverter);
         factory.getContainerProperties()
                 .setAckMode(ContainerProperties.AckMode.RECORD);

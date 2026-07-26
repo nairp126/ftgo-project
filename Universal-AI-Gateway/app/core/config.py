@@ -163,7 +163,7 @@ class Settings(BaseSettings):
     downstream_health_url: str = Field(default="http://ftgo-api-gateway:8080/actuator/health", validation_alias="DOWNSTREAM_HEALTH_URL")
 
     # JWT Authentication config
-    jwt_secret_key: Optional[str] = Field(default=None, validation_alias="JWT_SECRET_KEY")
+    jwt_secret_key: str = Field(validation_alias="JWT_SECRET_KEY")
 
     # S3 Audit storage config
     s3_bucket_name: Optional[str] = Field(default="ftgo-audit-logs", validation_alias="S3_BUCKET_NAME")

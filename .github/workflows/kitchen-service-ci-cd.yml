@@ -28,7 +28,7 @@ permissions:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION || 'ap-south-1' }}
-  ECR_REPOSITORY: ${{ vars.KITCHEN_ECR_REPOSITORY }}
+  ECR_REPOSITORY: ${ secrets.KITCHEN_ECR_REPOSITORY || vars.KITCHEN_ECR_REPOSITORY || 'ftgo-kitchen-service' }
   EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
   SERVICE_DIRECTORY: kitchen-service
   K8S_DIRECTORY: k8s/kitchen-service

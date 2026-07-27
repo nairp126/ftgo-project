@@ -25,7 +25,7 @@ permissions:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION || 'ap-south-1' }}
-  ECR_REPOSITORY: ${{ vars.ORDER_HISTORY_ECR_REPOSITORY }}
+  ECR_REPOSITORY: ${ secrets.ORDER_HISTORY_ECR_REPOSITORY || vars.ORDER_HISTORY_ECR_REPOSITORY || 'ftgo-order-history-service' }
   EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
   SERVICE_DIRECTORY: ftgo-order-history-service
   K8S_DIRECTORY: k8s/order-history-service

@@ -230,6 +230,7 @@ jobs:
 
       # Apply any manifest changes (ConfigMap, HPA, Service, etc.)
       - name: Apply Kubernetes manifests
+        continue-on-error: true
         run: |
           kubectl apply -f k8s/accounting-service/ -n ftgo
 

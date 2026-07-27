@@ -173,3 +173,15 @@ image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/universal-ai-gateway:latest
 | **Order Service** | `ftgo-order-service` | 2/2 | **Running** | `ftgo-order-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |
 | **Order History Service** | `ftgo-order-history-service` | 2/2 | **Running** | `ftgo-order-history-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |
 | **Accounting Service** | `ftgo-accounting-service` | 2/2 | **Running** | `ftgo-accounting-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |
+
+### 35. Issue 35 — Gateway Sub-model Settings Resolution & Overwriting `.env` (`Error 111 connecting to localhost:6379`)
+* **Context:** Ingress health check to external ALB `http://k8s-ftgo-ftgoingr-7da04dfdb1-2025923773.ap-south-1.elb.amazonaws.com/health` returned HTTP 200, but reported `"status": "degraded"` with `Error 111 connecting to localhost:6379` and `sorry, too many clients already`.
+* **Root Problem:**
+  1. `load_dotenv()` inside `Universal-AI-Gateway/app/core/config.py` read `/app/.env` (which was baked into Docker build) and overwrote Kubernetes container environment variables with `localhost`.
+  2. Pydantic v2 `BaseSettings` on sub-models `RedisSettings` and `DatabaseSettings` initialized at module import time before environment variable override.
+  3. PostgreSQL client connection pool size defaulted to 20 per pod, exceeding PostgreSQL's default `max_connections = 100` when scaled across multiple microservices.
+* **Resolution:**
+  1. Added `.env` to `Universal-AI-Gateway/.dockerignore` and updated `load_dotenv(override=False)` in `config.py`.
+  2. Updated `DatabaseSettings` and `RedisSettings` to inherit from `BaseModel` with dynamic `default_factory` reading `os.getenv("REDIS_HOST")` and `os.getenv("DB_HOST")`.
+  3. Reduced `DB_POOL_SIZE` to 5 in `k8s/gateway/configmap.yaml` and added `DB_PASSWORD: bXlzZWNyZXRwYXNzd29yZA==` to `k8s/gateway/secret.yaml`.
+  4. Verified full 100% healthy status (`"status": "healthy"`) across all AI providers, Redis cache, and PostgreSQL database via external AWS ALB ingress endpoint.

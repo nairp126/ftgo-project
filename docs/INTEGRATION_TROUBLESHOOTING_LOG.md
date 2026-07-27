@@ -154,11 +154,19 @@ image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/universal-ai-gateway:latest
 
 ---
 
-### 3. Live Amazon EKS Cluster Deployment Verification (7/7 PASS)
+### 34. Issue 34 — Missing `k8s/ftgo-api-gateway/` Directory & Layer 2 Internal Gateway Image (`the path "k8s/ftgo-api-gateway/" does not exist`)
+* **Context:** Executing `kubectl apply -f k8s/ftgo-api-gateway/` returned `error: the path "k8s/ftgo-api-gateway/" does not exist`.
+* **Root Problem:** The repository contained source code in `ftgo-api-gateway/`, but lacked the Kubernetes deployment, service, and configmap manifests in `k8s/ftgo-api-gateway/`. Furthermore, upstream target ports in `ftgo-api-gateway/main.py` needed synchronization with active microservice ports (`kitchen: 8082`, `restaurants: 8081`, `order-history: 8082`).
+* **Resolution:** Provisioned `k8s/ftgo-api-gateway/service.yaml`, `configmap.yaml`, and `deployment.yaml` (2 replicas on port `8080`), updated `main.py` upstream ports, built & pushed `120569617989.dkr.ecr.ap-south-1.amazonaws.com/ftgo-api-gateway:latest` to Amazon ECR, and deployed to EKS with `100% READY` status.
 
-| Service | Deployment Name | Replicas | Status | ECR Image URI | Postgres Host | Health Probe | Final Result |
+---
+
+### 3. Live Amazon EKS Cluster Deployment Verification (8/8 PASS)
+
+| Service | Deployment Name | Replicas | Status | ECR Image URI | Postgres Connection | Health Probe | Final Result |
 | :--- | :--- | :---: | :---: | :--- | :--- | :---: | :---: |
-| **Universal AI Gateway** | `universal-ai-gateway` | 2/2 | **Running** | `universal-ai-gateway:latest` | N/A | **PASS** | **PASS** |
+| **Layer 1 — Universal AI Gateway** | `universal-ai-gateway` | 2/2 | **Running** | `universal-ai-gateway:latest` | N/A | **PASS** | **PASS** |
+| **Layer 2 — FTGO API Gateway** | `ftgo-api-gateway` | 2/2 | **Running** | `ftgo-api-gateway:latest` | N/A | **PASS** | **PASS** |
 | **Consumer Service** | `ftgo-consumer-service` | 2/2 | **Running** | `ftgo-consumer-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |
 | **Restaurant Service** | `ftgo-restaurant-service` | 2/2 | **Running** | `ftgo-restaurant-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |
 | **Kitchen Service** | `ftgo-kitchen-service` | 2/2 | **Running** | `ftgo-kitchen-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |

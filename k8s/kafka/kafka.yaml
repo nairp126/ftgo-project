@@ -35,7 +35,7 @@ spec:
             - name: KAFKA_NODE_ID
               value: "1"
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-              value: "1@kafka:9093"
+              value: "1@localhost:9093"
 
             # ── Listeners ───────────────────────────────────────────────────────
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
@@ -57,9 +57,8 @@ spec:
             - name: CLUSTER_ID
               value: "MkU3OEVBNTcwNTJENDM2Qg"
 
-            # ── Log directory — must match the volume mount path ────────────────
-            - name: KAFKA_LOG_DIRS
-              value: "/var/lib/kafka/data"
+            # KAFKA_LOG_DIRS intentionally omitted — Confluent's entrypoint
+            # uses its own default path and handles kafka-storage format internally.
 
             # ── Topic / replication defaults ────────────────────────────────────
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
@@ -73,8 +72,8 @@ spec:
 
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: 250m
+              memory: 512Mi
             limits:
               cpu: 1000m
               memory: 2Gi
@@ -93,13 +92,7 @@ spec:
             periodSeconds: 20
             failureThreshold: 3
 
-          volumeMounts:
-            - name: kafka-data
-              mountPath: /var/lib/kafka/data
 
-      volumes:
-        - name: kafka-data
-          emptyDir: {}
 
 ---
 apiVersion: v1

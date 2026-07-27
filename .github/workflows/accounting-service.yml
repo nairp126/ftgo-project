@@ -199,7 +199,7 @@ jobs:
     needs: docker-build-push
     runs-on: ubuntu-latest
     # Gate: only deploy from main branch
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     environment:
       name: production
       url: https://ftgo.example.com   # Update to real URL

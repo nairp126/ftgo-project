@@ -13,7 +13,7 @@ data:
   SERVER_PORT: "8080"
 
   # Database (non-secret config — credentials come from Secret)
-  DB_URL: "jdbc:postgresql://ftgo-accounting-postgres:5432/ftgo_accounting"
+  DB_URL: "jdbc:postgresql://ftgo-postgres-postgresql:5432/postgres"
   DDL_AUTO: "validate"
 
   # Kafka

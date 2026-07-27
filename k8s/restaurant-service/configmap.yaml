@@ -1,16 +1,17 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: restaurant-service-config
+  name: ftgo-restaurant-service-config
   labels:
     app: restaurant-service
     component: backend
 data:
   SERVER_PORT: "8081"
   SPRING_PROFILES_ACTIVE: "docker"
-  SPRING_DATASOURCE_URL: "jdbc:postgresql://restaurant-postgres:5432/restaurant_db"
-  SPRING_DATASOURCE_USERNAME: "restaurant_user"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://ftgo-postgres-postgresql:5432/postgres"
+  SPRING_DATASOURCE_USERNAME: "postgres"
   SPRING_JPA_HIBERNATE_DDL_AUTO: "update"
+  SPRING_JPA_DATABASE_PLATFORM: "org.hibernate.dialect.PostgreSQLDialect"
   SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
   MENU_UPDATED_TOPIC: "restaurant.menu.updated"
   JAVA_OPTS: "-XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"

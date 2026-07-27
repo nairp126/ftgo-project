@@ -8,8 +8,10 @@ metadata:
 data:
   SPRING_APPLICATION_NAME: ftgo-order-service
 
-  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-order:5432/orders
+  SPRING_DATASOURCE_URL: jdbc:postgresql://ftgo-postgres-postgresql:5432/postgres
 
   SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
 
   SPRING_PROFILES_ACTIVE: kubernetes
+  SPRING_DATASOURCE_USERNAME: "postgres"
+  SPRING_JPA_DATABASE_PLATFORM: "org.hibernate.dialect.PostgreSQLDialect"

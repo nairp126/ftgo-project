@@ -18,7 +18,7 @@ spec:
         component: backend
     spec:
       containers:
-        - name: order-history-service
+        - name: ftgo-order-history-service
           image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/ftgo-order-history-service:latest
           imagePullPolicy: IfNotPresent
           ports:
@@ -26,9 +26,9 @@ spec:
               name: http
           envFrom:
             - secretRef:
-                name: order-history-service-secret
+                name: ftgo-order-history-service-secret
             - configMapRef:
-                name: order-history-service-config
+                name: ftgo-order-history-service-config
           resources:
             requests:
               cpu: 250m

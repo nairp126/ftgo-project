@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: kitchen-service
+  name: ftgo-kitchen-service
   labels:
     app: kitchen-service
     component: backend

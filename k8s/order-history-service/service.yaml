@@ -17,17 +17,19 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: order-history-service-config
+  name: ftgo-order-history-service-config
   namespace: ftgo
 data:
-  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-history:5432/ftgo-order-history"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://ftgo-postgres-postgresql:5432/postgres"
   SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  SPRING_DATASOURCE_USERNAME: "postgres"
+  SPRING_JPA_DATABASE_PLATFORM: "org.hibernate.dialect.PostgreSQLDialect"
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: order-history-service-secret
+  name: ftgo-order-history-service-secret
   namespace: ftgo
 type: Opaque
 data:
-  SPRING_DATASOURCE_PASSWORD: aGlzdG9yeV9wYXNzd29yZA==
+  SPRING_DATASOURCE_PASSWORD: bXlzZWNyZXRwYXNzd29yZA==

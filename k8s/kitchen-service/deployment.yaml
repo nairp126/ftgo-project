@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kitchen-service
+  name: ftgo-kitchen-service
   namespace: ftgo
   labels:
     app: kitchen-service
@@ -29,7 +29,7 @@ spec:
         runAsGroup: 1000
         fsGroup: 1000
       containers:
-        - name: kitchen-service
+        - name: ftgo-kitchen-service
           image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/ftgo-kitchen-service:latest
           imagePullPolicy: IfNotPresent
           ports:
@@ -38,9 +38,9 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: kitchen-service-config
+                name: ftgo-kitchen-service-config
             - secretRef:
-                name: kitchen-service-secret
+                name: ftgo-kitchen-service-secret
           readinessProbe:
             httpGet:
               path: /health

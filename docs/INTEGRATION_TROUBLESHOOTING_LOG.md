@@ -2,16 +2,16 @@
 
 > **Project:** FTGO Microservices Platform  
 > **Workflows Covered:** `/integration-1-docker-compose`, `/integration-2-e2e-test`, `/integration-3-audit-all-services`, `/integration-4-k8s-validation`, `/integration-5-cicd-check`  
-> **Date:** July 26, 2026  
+> **Date:** July 27, 2026  
 > **Status:** All 18 Containers Healthy | E2E Order Flow Verified (7/7 PASS) | Full Service Audit Verified (7/7 PASS) | K8s Manifest Validation Verified (7/7 PASS) | CI/CD Pipeline Verification Verified (7/7 PASS)
 
 ---
 
 ## Executive Summary
 
-During the execution of **Integration 1** (Docker Compose Full Stack Setup), **Integration 2** (End-to-End Order Flow Test), **Integration 3** (Full Service Audit), **Integration 4** (Kubernetes Manifest Validation), and **Integration 5** (CI/CD Pipeline Verification), technical, build, configuration, bean initialization, security, port mapping, Kubernetes manifest, namespace standardization, and CI/CD workflow issues were encountered across the microservices and edge gateway stack.
+During the execution of **Integration 1** (Docker Compose Full Stack Setup), **Integration 2** (End-to-End Order Flow Test), **Integration 3** (Full Service Audit), **Integration 4** (Kubernetes Manifest Validation), and **Integration 5** (CI/CD Pipeline Verification), technical, build, configuration, bean initialization, security, port mapping, Kubernetes manifest, namespace standardization, messaging infrastructure, and CI/CD workflow issues were encountered across the microservices and edge gateway stack.
 
-This document serves as the single consolidated reference logging all 18 technical issues faced, why each issue occurred, how it was diagnosed, the exact code/configuration updates made to resolve them, and the final verification results.
+This document serves as the single consolidated reference logging all 19 technical issues faced, why each issue occurred, how it was diagnosed, the exact code/configuration updates made to resolve them, and the final verification results.
 
 ---
 
@@ -37,6 +37,7 @@ This document serves as the single consolidated reference logging all 18 technic
 | **16** | Int 4 | Non-Standardized K8s Namespaces | `k8s/*/deployment.yaml` | Manifests contained inconsistent or missing `metadata.namespace` declarations | Standardized `namespace: ftgo` across all Kubernetes service deployments |
 | **17** | Int 4 | Client-Only K8s Validation Failure | `kubectl` dry-run | Client dry-run attempted OpenAPI schema download without an active local cluster API server | Created offline YAML schema validation suite (`scratch/validate_k8s_manifests.py`) verifying API object structure |
 | **18** | Int 5 | Order Service ECR Push & SHA Tagging Missing | `.github/workflows/order-service.yml` | Workflow built image locally but lacked ECR login and Git SHA tagging | Added `aws-actions/amazon-ecr-login` step and `${{ github.sha }}` image tag push |
+| **19** | Int 4 | Missing K8s Kafka & Zookeeper Cluster | `k8s/kafka/` | Folder `k8s/kafka/` was empty because feature branches focused solely on service manifests | Provisioned `zookeeper.yaml` and `kafka.yaml` (Deployments + ClusterIP Services) in `ftgo` namespace on ports 2181, 9092, and 29092 |
 
 ---
 
@@ -56,24 +57,10 @@ This document serves as the single consolidated reference logging all 18 technic
 * **Security & Secret Hardening:** Converted plaintext passwords to base64 `data:` fields, achieving **0** hardcoded secret vulnerabilities.
 * **K8s & CI/CD Provisioning:** Added missing Kubernetes manifests and complete GitHub Actions workflow definitions.
 
-### 4. Integration 4 — Kubernetes Manifest Validation
-* **Namespace Standardization:** Set `namespace: ftgo` across all deployments.
+### 4. Integration 4 — Kubernetes Manifest Validation & Kafka Provisioning
+* **Namespace & Messaging Infrastructure:** Standardized `namespace: ftgo` across all deployments and provisioned `zookeeper.yaml` and `kafka.yaml` inside `k8s/kafka/`.
 * **Validation Results (7/7 PASS):** Verified DryRun syntax, Probes, InitialDelaySeconds, Limits/Requests, ClusterIP, Base64 Secrets, and K8s DNS.
 
 ### 5. Integration 5 — CI/CD Pipeline Verification
 * **Pipeline Hardening:** Updated `.github/workflows/order-service.yml` with AWS ECR authentication and Git SHA tagging.
 * **Pipeline Results (7/7 PASS):** Verified file existence, YAML syntax, service/k8s path triggers, test jobs, build jobs, ECR push, and Git SHA tagging across all 7 service pipelines.
-
----
-
-## Final CI/CD Verification Matrix (7/7 PASS)
-
-| Pipeline | Exist | YAML | Service Path | K8s Path | Test Job | Build Job | ECR Push | Git SHA Tagging | Final Result |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Universal AI Gateway** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Order Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Kitchen Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Restaurant Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Accounting Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Consumer Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
-| **Order History Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |

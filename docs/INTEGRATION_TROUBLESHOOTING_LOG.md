@@ -3,15 +3,15 @@
 > **Project:** FTGO Microservices Platform  
 > **Workflows Covered:** `/integration-1-docker-compose`, `/integration-2-e2e-test`, `/integration-3-audit-all-services`, `/integration-4-k8s-validation`, `/integration-5-cicd-check`  
 > **Date:** July 27, 2026  
-> **Status:** All 18 Containers Healthy | E2E Order Flow Verified (7/7 PASS) | Full Service Audit Verified (7/7 PASS) | K8s Manifest Validation Verified (7/7 PASS) | CI/CD Pipeline Verification Verified (7/7 PASS) | ECR Image URIs Provisioned (7/7 PASS)
+> **Status:** All 18 Containers Healthy | Live AWS EKS E2E Verification (7/7 PASS) | E2E Order Flow Verified (7/7 PASS) | Full Service Audit Verified (7/7 PASS) | K8s Manifest Validation Verified (7/7 PASS) | CI/CD Pipeline Verification Verified (7/7 PASS) | ECR Image URIs Provisioned (7/7 PASS)
 
 ---
 
 ## Executive Summary
 
-During the execution of **Integration 1** through **Integration 5** and post-integration Kubernetes / CI/CD deployment hardening, a total of **29 technical issues** were encountered across Docker Compose setup, E2E order flow, service governance, Kubernetes manifest validation, messaging infrastructure, GitHub Actions CI/CD pipelines, and Amazon ECR integration. 
+During the execution of **Integration 1** through **Integration 5** and post-integration Kubernetes / CI/CD deployment hardening, a total of **38 technical issues** were encountered across Docker Compose setup, E2E order flow, service governance, Kubernetes manifest validation, messaging infrastructure, GitHub Actions CI/CD pipelines, and Amazon ECR integration. 
 
-This document serves as the single master reference detailing all 29 issues, the root cause for each, how it was diagnosed, the exact code and configuration updates applied to resolve it, and the final verification results.
+This document serves as the single master reference detailing all 38 issues, the root cause for each, how it was diagnosed, the exact code and configuration updates applied to resolve it, and the final verification results.
 
 ---
 
@@ -185,3 +185,43 @@ image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/universal-ai-gateway:latest
   2. Updated `DatabaseSettings` and `RedisSettings` to inherit from `BaseModel` with dynamic `default_factory` reading `os.getenv("REDIS_HOST")` and `os.getenv("DB_HOST")`.
   3. Reduced `DB_POOL_SIZE` to 5 in `k8s/gateway/configmap.yaml` and added `DB_PASSWORD: bXlzZWNyZXRwYXNzd29yZA==` to `k8s/gateway/secret.yaml`.
   4. Verified full 100% healthy status (`"status": "healthy"`) across all AI providers, Redis cache, and PostgreSQL database via external AWS ALB ingress endpoint.
+
+---
+
+### 36. Issue 36 — Ingress Class Deprecation Warning & Ingress Class `<none>` (`kubernetes.io/ingress.class` annotation)
+* **Context:** Running `kubectl describe ingress ftgo-ingress -n ftgo` returned `Ingress Class: <none>` and `Warning: annotation "kubernetes.io/ingress.class" is deprecated, please use 'spec.ingressClassName' instead`.
+* **Root Problem:** The ingress manifest in `k8s/gateway/ingress.yaml` used legacy annotation `kubernetes.io/ingress.class: alb` instead of modern `spec.ingressClassName: alb` supported in Kubernetes v1.18+.
+* **Resolution:** Updated `k8s/gateway/ingress.yaml` to specify `spec.ingressClassName: alb` under `spec:`. Applied updated manifest and confirmed `Ingress Class: alb` and status `SuccessfullyReconciled` with zero warnings.
+
+---
+
+### 37. Issue 37 — E2E Order Flow Payload & Authentication Claims Mismatches (`401`, `404`, `400` errors)
+* **Context:** Running initial live EKS E2E test suite resulted in 401 Unauthorized, 404 Route Not Found, and 400 Bad Request responses.
+* **Root Problem:**
+  1. Universal AI Gateway authentication middleware (`jwt_handler.py`) requires `tenant_id` claim in JWT payload.
+  2. Gateway reverse proxy routing table (`proxy_config.py`) matches `/api/` prefix routes (e.g. `/api/consumers`, `/api/restaurants`, `/api/orders`).
+  3. Consumer DTO requires `firstName` and `lastName`.
+  4. Restaurant DTO requires `address` as a plain String (not a nested JSON object).
+  5. Order service requires `restaurantId` as a `Long` domain reference.
+* **Resolution:** Formatted test runner JWT token payload with required `sub` and `tenant_id` claims, updated route endpoints to `/api/*`, and supplied compliant JSON body payloads matching Spring Boot DTO schemas.
+
+---
+
+### 38. Issue 38 — Internal Gateway Upstream Port Mismatches for Order History & Accounting (`504 UPSTREAM_TIMEOUT`)
+* **Context:** Live EKS E2E test for Order History `/api/order-history?consumerId=4` timed out with `HTTP 504 UPSTREAM_TIMEOUT` (`Upstream service did not respond within 10.0s`).
+* **Root Problem:** In `ftgo-api-gateway/main.py`, `SERVICE_MAP` routed `order-history` to `http://ftgo-order-history-service:8082/orders` and `accounting` to `:8080`. However, the Kubernetes Service `ftgo-order-history-service` exposes port `8080` (mapping to targetPort `8082`), and `ftgo-accounting-service` exposes port `80`.
+* **Resolution:** Updated `SERVICE_MAP` in `ftgo-api-gateway/main.py` to point `order-history` to `http://ftgo-order-history-service:8080/orders` and `accounting` to `http://ftgo-accounting-service:80/accounting`. Rebuilt container, pushed `120569617989.dkr.ecr.ap-south-1.amazonaws.com/ftgo-api-gateway:latest` to ECR, restarted deployment, and re-ran verification suite.
+
+---
+
+## 4. Live AWS EKS Cluster End-to-End Verification Matrix (7/7 PASS)
+
+| Test Step | Target Route | Protocol | Expected Output / Response | Live EKS Status | Result |
+| :--- | :--- | :---: | :--- | :---: | :---: |
+| **[1] Layer 1 Universal AI Gateway Health** | `GET /health` | HTTP | `{"status": "healthy"}` (Providers + Redis + DB) | **HTTP 200** | **PASS** |
+| **[2] Layer 2 FTGO Gateway Health** | `GET /actuator/health` | HTTP | `{"status": "healthy"}` | **HTTP 200** | **PASS** |
+| **[3] Consumer Creation** | `POST /api/consumers` | HTTP | `{"id": 4, "firstName": "Priya", "lastName": "Nair"}` | **HTTP 200** | **PASS** |
+| **[4] Restaurant Creation** | `POST /api/restaurants` | HTTP | `{"id": "36dc301e...", "status": "ACTIVE"}` | **HTTP 201** | **PASS** |
+| **[5] Place Order** | `POST /api/orders` | HTTP | `{"orderId": 4, "message": "Order created..."}` | **HTTP 201** | **PASS** |
+| **[6] Saga State Check** | `GET /api/orders/4` | HTTP | `{"id": 4, "status": "CREATED"}` | **HTTP 200** | **PASS** |
+| **[7] Order History Lookup** | `GET /api/order-history?consumerId=4` | HTTP | `[]` (HTTP 200 OK array) | **HTTP 200** | **PASS** |

@@ -25,6 +25,7 @@ on:
       - 'ftgo-accounting-service/**'
       - 'k8s/accounting-service/**'
       - '.github/workflows/accounting-service.yml'
+  workflow_dispatch:
 
 # Cancel in-progress runs on the same branch when a new push arrives
 concurrency:

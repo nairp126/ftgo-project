@@ -20,25 +20,25 @@ class RedisManager:
     def __init__(self):
         self._pool: ConnectionPool | None = None
         self._client: Redis | None = None
-        self._settings = get_settings()
     
     def create_pool(self) -> ConnectionPool:
         """Create Redis connection pool"""
         if self._pool is None:
+            settings = get_settings()
             self._pool = ConnectionPool(
-                host=self._settings.redis.host,
-                port=self._settings.redis.port,
-                password=self._settings.redis.password,
-                db=self._settings.redis.db,
-                max_connections=self._settings.redis.pool_size,
-                socket_timeout=self._settings.redis.socket_timeout,
-                socket_connect_timeout=self._settings.redis.socket_connect_timeout,
+                host=settings.redis.host,
+                port=settings.redis.port,
+                password=settings.redis.password,
+                db=settings.redis.db,
+                max_connections=settings.redis.pool_size,
+                socket_timeout=settings.redis.socket_timeout,
+                socket_connect_timeout=settings.redis.socket_connect_timeout,
                 decode_responses=True,  # Automatically decode responses to strings
                 retry_on_timeout=True,
                 health_check_interval=30,  # Health check every 30 seconds
             )
             logger.info(
-                f"Created Redis connection pool with max_connections={self._settings.redis.pool_size}"
+                f"Created Redis connection pool with host={settings.redis.host}:{settings.redis.port}"
             )
         return self._pool
     

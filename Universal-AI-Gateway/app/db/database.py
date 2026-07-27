@@ -33,23 +33,22 @@ class DatabaseManager:
     def __init__(self):
         self._engine: AsyncEngine | None = None
         self._session_factory: async_sessionmaker[AsyncSession] | None = None
-        self._settings = get_settings()
 
     def create_engine(self) -> AsyncEngine:
         """Create async database engine with connection pooling"""
         if self._engine is None:
+            settings = get_settings()
             self._engine = create_async_engine(
-                self._settings.database.url,
-                pool_size=self._settings.database.pool_size,
-                max_overflow=self._settings.database.max_overflow,
-                pool_timeout=self._settings.database.pool_timeout,
+                settings.database.url,
+                pool_size=settings.database.pool_size,
+                max_overflow=settings.database.max_overflow,
+                pool_timeout=settings.database.pool_timeout,
                 pool_pre_ping=True,  # Validate connections before use
-                echo=self._settings.debug,  # Log SQL queries in debug mode
+                echo=settings.debug,  # Log SQL queries in debug mode
                 future=True,  # Use SQLAlchemy 2.0 style
             )
             logger.info(
-                f"Created database engine with pool_size={self._settings.database.pool_size}, "
-                f"max_overflow={self._settings.database.max_overflow}"
+                f"Created database engine with url={settings.database.url}"
             )
         return self._engine
 

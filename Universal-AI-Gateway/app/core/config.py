@@ -3,28 +3,24 @@ Core configuration module using Pydantic settings for environment-based configur
 Supports Requirements 11.1, 11.2 for configurable settings.
 """
 
-from typing import Optional, List, Dict, Any
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator
-from functools import lru_cache
 import os
-from dotenv import load_dotenv
+from typing import Optional, List, Dict, Any
+from functools import lru_cache
+from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Load .env file explicitly
-load_dotenv()
 
-
-class DatabaseSettings(BaseSettings):
+class DatabaseSettings(BaseModel):
     """Database configuration settings"""
     
-    host: str = Field(default="localhost", validation_alias="DB_HOST")
-    port: int = Field(default=5432, validation_alias="DB_PORT")
-    name: str = Field(default="llm_gateway", validation_alias="DB_NAME")
-    user: str = Field(default="postgres", validation_alias="DB_USER")
-    password: str = Field(default="", validation_alias="DB_PASSWORD")
-    pool_size: int = Field(default=20, validation_alias="DB_POOL_SIZE")
-    max_overflow: int = Field(default=30, validation_alias="DB_MAX_OVERFLOW")
-    pool_timeout: int = Field(default=30, validation_alias="DB_POOL_TIMEOUT")
+    host: str = Field(default_factory=lambda: os.getenv("DB_HOST", "localhost"))
+    port: int = Field(default_factory=lambda: int(os.getenv("DB_PORT", "5432")))
+    name: str = Field(default_factory=lambda: os.getenv("DB_NAME", "postgres"))
+    user: str = Field(default_factory=lambda: os.getenv("DB_USER", "postgres"))
+    password: str = Field(default_factory=lambda: os.getenv("DB_PASSWORD", ""))
+    pool_size: int = Field(default=20)
+    max_overflow: int = Field(default=30)
+    pool_timeout: int = Field(default=30)
     
     @property
     def url(self) -> str:
@@ -32,16 +28,16 @@ class DatabaseSettings(BaseSettings):
         return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
 
 
-class RedisSettings(BaseSettings):
+class RedisSettings(BaseModel):
     """Redis configuration settings"""
     
-    host: str = Field(default="localhost", validation_alias="REDIS_HOST")
-    port: int = Field(default=6379, validation_alias="REDIS_PORT")
-    password: Optional[str] = Field(default=None, validation_alias="REDIS_PASSWORD")
-    db: int = Field(default=0, validation_alias="REDIS_DB")
-    pool_size: int = Field(default=20, validation_alias="REDIS_POOL_SIZE")
-    socket_timeout: int = Field(default=5, validation_alias="REDIS_SOCKET_TIMEOUT")
-    socket_connect_timeout: int = Field(default=5, validation_alias="REDIS_SOCKET_CONNECT_TIMEOUT")
+    host: str = Field(default_factory=lambda: os.getenv("REDIS_HOST", "localhost"))
+    port: int = Field(default_factory=lambda: int(os.getenv("REDIS_PORT", "6379")))
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("REDIS_PASSWORD", None))
+    db: int = Field(default=0)
+    pool_size: int = Field(default=20)
+    socket_timeout: int = Field(default=5)
+    socket_connect_timeout: int = Field(default=5)
     
     @property
     def url(self) -> str:
@@ -173,6 +169,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        env_nested_delimiter="__",
     )
 
 

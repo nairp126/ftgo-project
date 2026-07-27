@@ -22,7 +22,7 @@ spec:
           image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/ftgo-order-history-service:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8080
+            - containerPort: 8082
               name: http
           envFrom:
             - secretRef:
@@ -39,12 +39,12 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8082
             initialDelaySeconds: 30
             periodSeconds: 15
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8082
             initialDelaySeconds: 15
             periodSeconds: 10

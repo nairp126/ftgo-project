@@ -6,25 +6,17 @@ metadata:
   labels:
     app: ftgo-accounting-service
     component: accounting
-    managed-by: kubectl
-    version: "0.1.0"
 data:
-  # Server
   SERVER_PORT: "8080"
-
-  # Database (non-secret config — credentials come from Secret)
   DB_URL: "jdbc:postgresql://ftgo-postgres-postgresql:5432/postgres"
-  DDL_AUTO: "validate"
-
-  # Kafka
+  DB_USERNAME: "postgres"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://ftgo-postgres-postgresql:5432/postgres"
+  SPRING_DATASOURCE_USERNAME: "postgres"
+  DDL_AUTO: "update"
   KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
   KAFKA_MAX_RETRIES: "3"
   KAFKA_RETRY_INTERVAL_MS: "1000"
-
-  # Topic names (match Order Service's published topic names exactly)
   TOPIC_ORDER_CREATED: "order.created"
   TOPIC_PAYMENT_AUTHORIZED: "payment.authorized"
   TOPIC_PAYMENT_FAILED: "payment.failed"
-
-  # JVM
   JAVA_TOOL_OPTIONS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"

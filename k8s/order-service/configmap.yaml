@@ -10,6 +10,6 @@ data:
 
   SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-order:5432/orders
 
-  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
 
   SPRING_PROFILES_ACTIVE: kubernetes

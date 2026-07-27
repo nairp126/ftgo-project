@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ftgo-api-gateway
+  namespace: ftgo
+  labels:
+    app: ftgo-api-gateway
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app: ftgo-api-gateway
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ftgo-api-gateway-config
+  namespace: ftgo
+data:
+  PORT: "8080"

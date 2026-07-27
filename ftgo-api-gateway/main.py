@@ -7,10 +7,10 @@ app = FastAPI(title="FTGO Internal API Gateway")
 SERVICE_MAP = {
     "orders": "http://ftgo-order-service:8080/orders",
     "consumers": "http://ftgo-consumer-service:8080/consumers",
-    "kitchen": "http://ftgo-kitchen-service:8080/api/kitchen",
-    "restaurants": "http://ftgo-restaurant-service:8080/api/restaurants",
+    "kitchen": "http://ftgo-kitchen-service:8082/api/kitchen",
+    "restaurants": "http://ftgo-restaurant-service:8081/api/restaurants",
     "accounting": "http://ftgo-accounting-service:8080/accounting",
-    "order-history": "http://ftgo-order-history-service:8080/orders",
+    "order-history": "http://ftgo-order-history-service:8082/orders",
 }
 
 @app.get("/actuator/health")

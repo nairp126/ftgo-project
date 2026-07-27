@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: universal-ai-gateway
-          image: ${ECR_REGISTRY}/universal-ai-gateway:${IMAGE_TAG}
+          image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/universal-ai-gateway:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

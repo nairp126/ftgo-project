@@ -38,7 +38,7 @@ spec:
       containers:
         - name: ftgo-order-service
 
-          image: ghcr.io/ftgo/ftgo-order-service:latest
+          image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/ftgo-order-service:latest
           imagePullPolicy: Always
 
           ports:

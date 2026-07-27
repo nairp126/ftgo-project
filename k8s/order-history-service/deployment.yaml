@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: order-history-service
-          image: ftgo-order-history-service:latest
+          image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/ftgo-order-history-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

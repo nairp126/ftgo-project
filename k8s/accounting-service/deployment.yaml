@@ -57,7 +57,7 @@ spec:
 
       containers:
         - name: ftgo-accounting-service
-          image: ghcr.io/ftgo/ftgo-accounting-service:latest
+          image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/ftgo-accounting-service:latest
           imagePullPolicy: Always
           ports:
             - name: http

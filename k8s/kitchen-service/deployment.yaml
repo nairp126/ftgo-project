@@ -30,7 +30,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: kitchen-service
-          image: ftgo/kitchen-service:local
+          image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/ftgo-kitchen-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

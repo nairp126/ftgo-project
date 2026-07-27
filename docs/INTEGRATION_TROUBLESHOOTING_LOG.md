@@ -130,3 +130,38 @@ image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/universal-ai-gateway:latest
 | **Accounting Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
 | **Consumer Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
 | **Order History Service** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** | **PASS** |
+
+
+### 30. Issue 30 — Missing `secretRef` in Deployment Manifests (`PSQLException: SCRAM-based authentication, but no password was provided`)
+* **Context:** Running `kubectl apply -f k8s/consumer-service/` failed with `CrashLoopBackOff` and `deployment "ftgo-consumer-service" exceeded its progress deadline`.
+* **Root Problem:** The `envFrom` block in `deployment.yaml` referenced `consumer-service-config` (ConfigMap), but omitted `consumer-service-secret`. Spring Boot could not read `SPRING_DATASOURCE_PASSWORD`, causing PostgreSQL to reject authentication.
+* **Resolution:** Added `secretRef` for `consumer-service-secret`, `ftgo-accounting-service-secret`, `order-history-service-secret`, and `ftgo-order-service-secret` across all deployment manifests under `k8s/`.
+
+### 31. Issue 31 — Missing `:latest` Image Tag in Amazon ECR
+* **Context:** Kubernetes node reported `code = NotFound desc = failed to resolve reference "120569617989.dkr.ecr.ap-south-1.amazonaws.com/ftgo-consumer-service:latest": not found`.
+* **Root Problem:** Workflows for `consumer-service`, `order-service`, and `order-history-service` pushed only the Git SHA tag (`${{ github.sha }}`) to ECR without tagging `:latest`.
+* **Resolution:** Updated all workflows to tag and push both `$IMAGE_TAG` and `latest` (`docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"`), and tagged existing SHA digests with `latest` in Amazon ECR.
+
+### 32. Issue 32 — Deployment Naming Mismatches (`Error from server (NotFound): deployments.apps "ftgo-restaurant-service" not found`)
+* **Context:** Running `kubectl rollout status deployment/ftgo-restaurant-service` returned `NotFound`.
+* **Root Problem:** Deployments in `k8s/restaurant-service/` and `k8s/kitchen-service/` were named `restaurant-service` and `kitchen-service` without the `ftgo-` prefix, while ConfigMaps referenced nonexistent Postgres hosts (`kitchen-postgres`, `restaurant-postgres`, `postgres-order`, `postgres-history`).
+* **Resolution:** Standardized all Deployment names (`ftgo-restaurant-service`, `ftgo-kitchen-service`, `ftgo-order-service`, `ftgo-order-history-service`, `ftgo-accounting-service`, `ftgo-consumer-service`) and unified all PostgreSQL database URLs to `jdbc:postgresql://ftgo-postgres-postgresql:5432/postgres`.
+
+### 33. Issue 33 — Missing Secret Key (`couldn't find key DB_USERNAME`) & Container Port Mismatch (`8082`)
+* **Context:** `ftgo-accounting-service` stayed in `CreateContainerConfigError` and `ftgo-order-history-service` repeatedly restarted (`CrashLoopBackOff`).
+* **Root Problem:** `ftgo-accounting-service-secret` lacked `DB_USERNAME`, causing container configuration failure. `ftgo-order-history-service` listens on port `8082` (per `application.properties`), but `deployment.yaml` probed port `8080`, triggering liveness probe termination.
+* **Resolution:** Added `DB_USERNAME: cG9zdGdyZXM=` (`postgres` in base64) to `ftgo-accounting-service-secret`, and updated `containerPort: 8082`, `targetPort: 8082`, and probe ports to `8082` in `k8s/order-history-service/`.
+
+---
+
+### 3. Live Amazon EKS Cluster Deployment Verification (7/7 PASS)
+
+| Service | Deployment Name | Replicas | Status | ECR Image URI | Postgres Host | Health Probe | Final Result |
+| :--- | :--- | :---: | :---: | :--- | :--- | :---: | :---: |
+| **Universal AI Gateway** | `universal-ai-gateway` | 2/2 | **Running** | `universal-ai-gateway:latest` | N/A | **PASS** | **PASS** |
+| **Consumer Service** | `ftgo-consumer-service` | 2/2 | **Running** | `ftgo-consumer-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |
+| **Restaurant Service** | `ftgo-restaurant-service` | 2/2 | **Running** | `ftgo-restaurant-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |
+| **Kitchen Service** | `ftgo-kitchen-service` | 2/2 | **Running** | `ftgo-kitchen-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |
+| **Order Service** | `ftgo-order-service` | 2/2 | **Running** | `ftgo-order-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |
+| **Order History Service** | `ftgo-order-history-service` | 2/2 | **Running** | `ftgo-order-history-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |
+| **Accounting Service** | `ftgo-accounting-service` | 2/2 | **Running** | `ftgo-accounting-service:latest` | `ftgo-postgres-postgresql:5432` | **PASS** | **PASS** |

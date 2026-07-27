@@ -25,7 +25,7 @@ permissions:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION || 'ap-south-1' }}
-  ECR_REPOSITORY: ${ secrets.ORDER_ECR_REPOSITORY || vars.ORDER_ECR_REPOSITORY || 'ftgo-order-service' }
+  ECR_REPOSITORY: ftgo-order-service
   EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
   SERVICE_DIRECTORY: ftgo-order-service
   K8S_DIRECTORY: k8s/order-service

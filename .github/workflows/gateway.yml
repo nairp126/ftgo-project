@@ -22,7 +22,7 @@ permissions:
 env:
   AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION || 'ap-south-1' }}
   ECR_REPOSITORY: universal-ai-gateway
-  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME || vars.EKS_CLUSTER_NAME || 'ftgo-cluster' }}
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME || vars.EKS_CLUSTER_NAME || 'ftgo-eks-cluster' }}
   SERVICE_DIRECTORY: Universal-AI-Gateway
 
 jobs:
@@ -79,3 +79,39 @@ jobs:
           docker build --tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" --tag "$ECR_REGISTRY/$ECR_REPOSITORY:latest" "$SERVICE_DIRECTORY"
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          audience: sts.amazonaws.com
+          aws-region: ${{ env.AWS_REGION || secrets.AWS_REGION || vars.AWS_REGION || 'ap-south-1' }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
+
+      - name: Deploy Gateway to EKS
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry || secrets.ECR_REGISTRY || '120569617989.dkr.ecr.ap-south-1.amazonaws.com' }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          kubectl apply -f k8s/gateway/configmap.yaml -n ftgo || kubectl apply -f k8s/gateway/configmap.yaml
+          kubectl apply -f k8s/gateway/service.yaml -n ftgo || kubectl apply -f k8s/gateway/service.yaml
+          kubectl apply -f k8s/gateway/deployment.yaml -n ftgo || kubectl apply -f k8s/gateway/deployment.yaml
+          kubectl rollout status deployment/universal-ai-gateway -n ftgo --timeout=300s || true

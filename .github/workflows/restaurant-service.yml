@@ -26,7 +26,7 @@ permissions:
 env:
   AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION || 'ap-south-1' }}
   ECR_REPOSITORY: ftgo-restaurant-service
-  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME || vars.EKS_CLUSTER_NAME || 'ftgo-cluster' }}
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME || vars.EKS_CLUSTER_NAME || 'ftgo-eks-cluster' }}
   SERVICE_DIRECTORY: restaurant-service
   K8S_DIRECTORY: k8s/restaurant-service
   DEPLOYMENT_NAME: restaurant-service

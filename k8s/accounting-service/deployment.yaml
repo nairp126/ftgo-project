@@ -66,6 +66,8 @@ spec:
 
           # ── Environment: non-sensitive config from ConfigMap ────────────────
           envFrom:
+            - secretRef:
+                name: ftgo-accounting-service-secret
             - configMapRef:
                 name: ftgo-accounting-service-config
 

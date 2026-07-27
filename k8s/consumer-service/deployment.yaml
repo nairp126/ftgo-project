@@ -25,6 +25,8 @@ spec:
             - containerPort: 8080
               name: http
           envFrom:
+            - secretRef:
+                name: consumer-service-secret
             - configMapRef:
                 name: consumer-service-config
           resources:

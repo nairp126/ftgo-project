@@ -47,6 +47,8 @@ spec:
               protocol: TCP
 
           envFrom:
+            - secretRef:
+                name: ftgo-order-service-secret
             - configMapRef:
                 name: ftgo-order-service-config
 

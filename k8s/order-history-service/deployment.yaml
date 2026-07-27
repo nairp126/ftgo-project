@@ -25,6 +25,8 @@ spec:
             - containerPort: 8080
               name: http
           envFrom:
+            - secretRef:
+                name: order-history-service-secret
             - configMapRef:
                 name: order-history-service-config
           resources:

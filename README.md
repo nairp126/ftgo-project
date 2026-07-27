@@ -39,8 +39,8 @@ deploying to AWS EKS in the `ap-south-1` (Mumbai) region.
 | Kitchen Service | Java / Spring Boot | Vikrant Rana | [@vikrantrana](https://github.com/vikrantrana) |
 | Restaurant Service | Java / Spring Boot | Vikrant Rana | [@vikrantrana](https://github.com/vikrantrana) |
 | Accounting Service | Java / Spring Boot | Anirudh Chawla | [@anirudhchawla](https://github.com/anirudhchawla) |
-| Consumer Service | Java / Spring Boot | Anshuman | [@anshuman](https://github.com/anshuman) |
-| Order History Service | Java / Spring Boot | Anshuman | [@anshuman](https://github.com/anshuman) |
+| Consumer Service | Java / Spring Boot | Anshuman Rangarh | [@EfxAnsh](https://github.com/EfxAnsh) |
+| Order History Service | Java / Spring Boot | Anshuman Rangarh | [@EfxAnsh](https://github.com/EfxAnsh) |
 | Universal AI Gateway (Edge) | Python / FastAPI | Pranav Nair | [@nairp126](https://github.com/nairp126) |
 | FTGO API Gateway (Internal) | Java / Spring Cloud Gateway | Pranav Nair | [@nairp126](https://github.com/nairp126) |
 | Kubernetes Platform | AWS EKS | All | - |
@@ -55,7 +55,7 @@ deploying to AWS EKS in the `ap-south-1` (Mumbai) region.
 | Kinjal Srivastava | Order Service Lead | Order Service | [@kinjalsrivastava](https://github.com/kinjalsrivastava) |
 | Vikrant Rana | Kitchen Lead | Kitchen Service, Restaurant Service | [@vikrantrana](https://github.com/vikrantrana) |
 | Anirudh Chawla | Accounting Lead | Accounting Service | [@anirudhchawla](https://github.com/anirudhchawla) |
-| Anshuman | Consumer Lead | Consumer Service, Order History Service | [@anshuman](https://github.com/anshuman) |
+| Anshuman Rangarh | Consumer Lead | Consumer Service, Order History Service | [@EfxAnsh](https://github.com/EfxAnsh) |
 | Pranav Nair | Platform & Gateway Lead | Universal AI Gateway, FTGO API Gateway, Kubernetes Platform | [@nairp126](https://github.com/nairp126) |
 
 ---

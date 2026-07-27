@@ -21,7 +21,7 @@ metadata:
   namespace: ftgo
 data:
   SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-consumer:5432/ftgo-consumer"
-  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
 ---
 apiVersion: v1
 kind: Secret

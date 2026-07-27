@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,7 +6,6 @@ metadata:
   namespace: ftgo
   labels:
     app: kafka
-    component: messaging
 spec:
   replicas: 1
   selector:
@@ -15,47 +15,65 @@ spec:
     metadata:
       labels:
         app: kafka
-        component: messaging
     spec:
-      containers:
-        - name: kafka
+      initContainers:
+        - name: kafka-format-storage
           image: confluentinc/cp-kafka:7.5.0
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 29092
-              name: plaintext
-            - containerPort: 9093
-              name: controller
+          command:
+            - /bin/sh
+            - -c
+            - |
+              kafka-storage format \
+                --config /etc/kafka/kraft/server.properties \
+                --cluster-id MkU3OEVBNTcwNTJENDM2Qg \
+                --ignore-formatted || true
           env:
-            # ── KRaft mode (no Zookeeper) ──────────────────────────────────────
             - name: KAFKA_PROCESS_ROLES
               value: "broker,controller"
             - name: KAFKA_NODE_ID
               value: "1"
-            # controller quorum: nodeId@host:controllerPort
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
               value: "1@kafka:9093"
-
-            # ── Listeners ──────────────────────────────────────────────────────
-            # PLAINTEXT  → internal pod-to-pod traffic  (kafka:29092)
-            # CONTROLLER → KRaft leader election only    (kafka:9093)
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka:9092"
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
               value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_LOG_DIRS
+              value: "/var/lib/kafka/data"
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.5.0
+          ports:
+            - containerPort: 9092
+              name: plaintext
+            - containerPort: 9093
+              name: controller
+          env:
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@kafka:9093"
             - name: KAFKA_LISTENERS
-              value: "PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
+              value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
             - name: KAFKA_ADVERTISED_LISTENERS
-              value: "PLAINTEXT://kafka:29092"
+              value: "PLAINTEXT://kafka.ftgo.svc.cluster.local:9092"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
             - name: KAFKA_INTER_BROKER_LISTENER_NAME
               value: "PLAINTEXT"
             - name: KAFKA_CONTROLLER_LISTENER_NAMES
               value: "CONTROLLER"
-
-            # ── KRaft cluster identity ──────────────────────────────────────────
-            # Generate once with:  kafka-storage.sh random-uuid
             - name: CLUSTER_ID
               value: "MkU3OEVBNTcwNTJENDM2Qg"
-
-            # ── Topic defaults ─────────────────────────────────────────────────
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
               value: "1"
             - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
@@ -64,11 +82,8 @@ spec:
               value: "1"
             - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
               value: "true"
-
-            # ── Log directory ──────────────────────────────────────────────────
             - name: KAFKA_LOG_DIRS
               value: "/var/lib/kafka/data"
-
           resources:
             requests:
               cpu: 500m
@@ -76,29 +91,24 @@ spec:
             limits:
               cpu: 1000m
               memory: 2Gi
-
           readinessProbe:
             tcpSocket:
-              port: 29092
+              port: 9092
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 5
-
           livenessProbe:
             tcpSocket:
-              port: 29092
+              port: 9092
             initialDelaySeconds: 60
             periodSeconds: 20
             failureThreshold: 3
-
           volumeMounts:
             - name: kafka-data
               mountPath: /var/lib/kafka/data
-
       volumes:
         - name: kafka-data
           emptyDir: {}
-
 ---
 apiVersion: v1
 kind: Service
@@ -109,12 +119,12 @@ metadata:
     app: kafka
 spec:
   type: ClusterIP
-  ports:
-    - port: 29092
-      targetPort: 29092
-      name: plaintext
-    - port: 9093
-      targetPort: 9093
-      name: controller
   selector:
     app: kafka
+  ports:
+    - name: plaintext
+      port: 9092
+      targetPort: 9092
+    - name: controller
+      port: 9093
+      targetPort: 9093

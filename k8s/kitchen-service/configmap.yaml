@@ -11,7 +11,7 @@ data:
   SPRING_DATASOURCE_URL: "jdbc:postgresql://kitchen-postgres:5432/kitchen_db"
   SPRING_DATASOURCE_USERNAME: "kitchen_user"
   SPRING_JPA_HIBERNATE_DDL_AUTO: "update"
-  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
   KITCHEN_KAFKA_GROUP_ID: "kitchen-service"
   ORDER_CREATED_TOPIC: "order.created"
   MENU_UPDATED_TOPIC: "restaurant.menu.updated"

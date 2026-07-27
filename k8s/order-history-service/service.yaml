@@ -21,7 +21,7 @@ metadata:
   namespace: ftgo
 data:
   SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-history:5432/ftgo-order-history"
-  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
 ---
 apiVersion: v1
 kind: Secret

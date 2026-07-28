@@ -9,9 +9,9 @@
 
 ## Executive Summary
 
-During the execution of **Integration 1** through **Integration 9** — covering Docker Compose, E2E verification, full service audit, Kubernetes manifest validation, CI/CD pipelines, EKS provisioning, EKS deployment, live EKS verification, and demo preparation — a total of **40 technical issues** were encountered and resolved.
+During the execution of **Integration 1** through **Integration 9** — covering Docker Compose, E2E verification, full service audit, Kubernetes manifest validation, CI/CD pipelines, EKS provisioning, EKS deployment, live EKS verification, and demo preparation — a total of **43 technical issues** were encountered and resolved.
 
-This document serves as the single master reference detailing all 40 issues, the root cause for each, how it was diagnosed, the exact code and configuration updates applied to resolve it, and the final verification results.
+This document serves as the single master reference detailing all 43 issues, the root cause for each, how it was diagnosed, the exact code and configuration updates applied to resolve it, and the final verification results.
 
 ---
 
@@ -59,6 +59,9 @@ This document serves as the single master reference detailing all 40 issues, the
 | **38** | Int 8 | Internal gateway upstream port mismatches (`504 UPSTREAM_TIMEOUT`) | `ftgo-api-gateway/main.py` | `SERVICE_MAP` used wrong K8s Service ports for `order-history` (8082→8080) and `accounting` (8080→80) | Corrected `SERVICE_MAP` ports, rebuilt and redeployed gateway image |
 | **39** | Int 9 | Stale pending pod blocking demo pre-check (`0/1 Pending — Insufficient cpu/memory`) | `ftgo-order-history-service` | `kubectl rollout restart` during port-fix testing created a new ReplicaSet pod that could not schedule on full nodes | Ran `kubectl rollout undo deployment/ftgo-order-history-service` to restore previous RS; all 22/22 pods Running |
 | **40** | Int 9 | Incomplete `teardown.py` — ALB orphan risk, missing IAM & OIDC cleanup | `teardown.py` | Original script only ran namespace delete + `eksctl delete cluster`, leaving ALB, IAM roles/policy, OIDC provider, and ECR repos uncleaned — ALB could orphan and continue billing | Rewrote `teardown.py` to poll until ALB is gone before `eksctl delete`, then explicitly delete IAM roles, policy, OIDC provider, and optionally all 8 ECR repositories |
+| **41** | Int 5–7 | EKS Cluster Name Mismatch in CI/CD Workflows | `.github/workflows/*.yml` | Workflows used `ftgo-cluster` instead of actual AWS cluster name `ftgo-eks-cluster`, causing `aws eks update-kubeconfig` to fail with `ResourceNotFoundException` | Standardized `EKS_CLUSTER_NAME: ftgo-eks-cluster` across all 7 workflow files |
+| **42** | Int 6–7 | EKS Persistent Volume PVC Stuck Pending (`unbound immediate PersistentVolumeClaims`) | `k8s/` / Helm PostgreSQL | EKS clusters do not auto-provision EBS volumes without the EBS CSI Driver addon; PVCs remained unbound indefinitely | Created IAM service account `AmazonEKS_EBS_CSI_DriverRole`, installed `aws-ebs-csi-driver` EKS addon, and set `gp2` as default StorageClass |
+| **43** | Int 4–7 | Kafka KRaft Mode Log Directory Storage Formatting Crash | `k8s/kafka/kafka.yaml` | Init container formatted log directory at a different path than what main Confluent container expected, causing startup crash | Removed conflicting init container volume mounts and allowed Confluent entrypoint to handle KRaft storage formatting internally |
 
 ---
 
@@ -284,3 +287,27 @@ image: 120569617989.dkr.ecr.ap-south-1.amazonaws.com/universal-ai-gateway:latest
 - [`demo-day-check.py`](../demo-day-check.py) — 14-check pre-demo gate (all PASS required)
 - [`teardown.py`](../teardown.py) — complete 7-step AWS resource cleanup
 - [`docs/DEMO_VIVA_GUIDE.md`](DEMO_VIVA_GUIDE.md) — 60-second viva answers + examiner Q&A
+
+---
+
+### 41. Issue 41 — EKS Cluster Name Mismatch in CI/CD Workflows (`ResourceNotFoundException`)
+* **Context:** Running GitHub Actions deploy jobs failed during the `update-kubeconfig` step with `aws: [ERROR]: An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found for name: ftgo-cluster`.
+* **Root Problem:** Workflow definitions in `.github/workflows/` defaulted `EKS_CLUSTER_NAME` to `'ftgo-cluster'`, whereas the cluster created in AWS EKS was named `ftgo-eks-cluster`.
+* **Resolution:** Updated `EKS_CLUSTER_NAME: ftgo-eks-cluster` across all 7 workflow files in `.github/workflows/`.
+
+---
+
+### 42. Issue 42 — EKS Persistent Volume PVC Stuck Pending (`unbound immediate PersistentVolumeClaims`)
+* **Context:** Deploying stateful workloads (e.g. PostgreSQL via Helm) resulted in pods remaining in `Pending` state indefinitely with `0/3 nodes are available: pod has unbound immediate PersistentVolumeClaims`.
+* **Root Problem:** EKS clusters do not automatically provision EBS storage for PersistentVolumeClaims. Without the Amazon EBS CSI Driver addon, Kubernetes cannot dynamically provision AWS EBS volumes to satisfy PVC requests.
+* **Resolution:** 
+  1. Created IAM role `AmazonEKS_EBS_CSI_DriverRole` with `AmazonEBSCSIDriverPolicy`.
+  2. Installed `aws-ebs-csi-driver` addon via `aws eks create-addon`.
+  3. Patched `gp2` StorageClass with `storageclass.kubernetes.io/is-default-class: "true"`.
+
+---
+
+### 43. Issue 43 — Kafka KRaft Mode Storage Formatting Crash
+* **Context:** Kafka pod in KRaft mode crashed immediately on startup without error output.
+* **Root Problem:** KRaft mode requires log directory formatting with a cluster UUID. An init container formatted `/tmp/kraft-combined-logs`, but the main Confluent container entrypoint (`cp-kafka:7.5.0`) expected to manage formatting internally at its default path.
+* **Resolution:** Removed custom init container volume mounts, supplied `CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"`, and allowed Confluent's container entrypoint to automatically format KRaft storage on first launch.

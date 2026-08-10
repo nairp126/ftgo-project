@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ftgo-accounting-service-config
+  namespace: ftgo
+  labels:
+    app: ftgo-accounting-service
+    component: accounting
+data:
+  SERVER_PORT: "8080"
+  DB_URL: "jdbc:postgresql://ftgo-postgres-postgresql:5432/postgres"
+  DB_USERNAME: "postgres"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://ftgo-postgres-postgresql:5432/postgres"
+  SPRING_DATASOURCE_USERNAME: "postgres"
+  DDL_AUTO: "update"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  KAFKA_MAX_RETRIES: "3"
+  KAFKA_RETRY_INTERVAL_MS: "1000"
+  TOPIC_ORDER_CREATED: "order.created"
+  TOPIC_PAYMENT_AUTHORIZED: "payment.authorized"
+  TOPIC_PAYMENT_FAILED: "payment.failed"
+  JAVA_TOOL_OPTIONS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"

@@ -1,0 +1,81 @@
+name: Order History Service CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - "ftgo-order-history-service/**"
+      - "k8s/order-history-service/**"
+      - ".github/workflows/order-history-service.yml"
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - "ftgo-order-history-service/**"
+      - "k8s/order-history-service/**"
+      - ".github/workflows/order-history-service.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION || 'ap-south-1' }}
+  ECR_REPOSITORY: ftgo-order-history-service
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME || vars.EKS_CLUSTER_NAME || 'ftgo-eks-cluster' }}
+  SERVICE_DIRECTORY: ftgo-order-history-service
+  K8S_DIRECTORY: k8s/order-history-service
+  DEPLOYMENT_NAME: ftgo-order-history-service
+
+jobs:
+  test:
+    name: Test and Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Run tests and package
+        working-directory: ${{ env.SERVICE_DIRECTORY }}
+        run: mvn --batch-mode package -DskipTests
+
+  build-and-deploy:
+    name: Build and Push ECR Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          audience: sts.amazonaws.com
+          aws-region: ${{ env.AWS_REGION || secrets.AWS_REGION || vars.AWS_REGION || 'ap-south-1' }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "${AWS_REGION:-ap-south-1}" || \
+          aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "${AWS_REGION:-ap-south-1}" --image-scanning-configuration scanOnPush=true
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build --tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" --tag "$ECR_REGISTRY/$ECR_REPOSITORY:latest" "$SERVICE_DIRECTORY"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"

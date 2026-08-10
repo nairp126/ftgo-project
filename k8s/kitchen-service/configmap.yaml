@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ftgo-kitchen-service-config
+  labels:
+    app: kitchen-service
+    component: backend
+data:
+  SERVER_PORT: "8082"
+  SPRING_PROFILES_ACTIVE: "docker"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://ftgo-postgres-postgresql:5432/postgres"
+  SPRING_DATASOURCE_USERNAME: "postgres"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "update"
+  SPRING_JPA_DATABASE_PLATFORM: "org.hibernate.dialect.PostgreSQLDialect"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  KITCHEN_KAFKA_GROUP_ID: "kitchen-service"
+  ORDER_CREATED_TOPIC: "order.created"
+  MENU_UPDATED_TOPIC: "restaurant.menu.updated"
+  TICKET_EVENTS_TOPIC: "kitchen.ticket.events"
+  JAVA_OPTS: "-XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"

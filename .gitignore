@@ -1,0 +1,16 @@
+.antigravity/
+.hypothesis/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+.vscode/
+.gradle/
+build/
+.DS_Store
+*.log
+.env
+.env.local
+scratch/

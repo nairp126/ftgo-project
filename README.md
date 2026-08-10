@@ -39,8 +39,8 @@ deploying to AWS EKS in the `ap-south-1` (Mumbai) region.
 | Kitchen Service | Java / Spring Boot | Vikrant Rana | [@vikrantrana](https://github.com/vikrantrana) |
 | Restaurant Service | Java / Spring Boot | Vikrant Rana | [@vikrantrana](https://github.com/vikrantrana) |
 | Accounting Service | Java / Spring Boot | Anirudh Chawla | [@anirudhchawla](https://github.com/anirudhchawla) |
-| Consumer Service | Java / Spring Boot | Anshuman | [@anshuman](https://github.com/anshuman) |
-| Order History Service | Java / Spring Boot | Anshuman | [@anshuman](https://github.com/anshuman) |
+| Consumer Service | Java / Spring Boot | Anshuman Rangarh | [@EfxAnsh](https://github.com/EfxAnsh) |
+| Order History Service | Java / Spring Boot | Anshuman Rangarh | [@EfxAnsh](https://github.com/EfxAnsh) |
 | Universal AI Gateway (Edge) | Python / FastAPI | Pranav Nair | [@nairp126](https://github.com/nairp126) |
 | FTGO API Gateway (Internal) | Java / Spring Cloud Gateway | Pranav Nair | [@nairp126](https://github.com/nairp126) |
 | Kubernetes Platform | AWS EKS | All | - |
@@ -55,7 +55,7 @@ deploying to AWS EKS in the `ap-south-1` (Mumbai) region.
 | Kinjal Srivastava | Order Service Lead | Order Service | [@kinjalsrivastava](https://github.com/kinjalsrivastava) |
 | Vikrant Rana | Kitchen Lead | Kitchen Service, Restaurant Service | [@vikrantrana](https://github.com/vikrantrana) |
 | Anirudh Chawla | Accounting Lead | Accounting Service | [@anirudhchawla](https://github.com/anirudhchawla) |
-| Anshuman | Consumer Lead | Consumer Service, Order History Service | [@anshuman](https://github.com/anshuman) |
+| Anshuman Rangarh | Consumer Lead | Consumer Service, Order History Service | [@EfxAnsh](https://github.com/EfxAnsh) |
 | Pranav Nair | Platform & Gateway Lead | Universal AI Gateway, FTGO API Gateway, Kubernetes Platform | [@nairp126](https://github.com/nairp126) |
 
 ---
@@ -189,14 +189,14 @@ ftgo-devops-project/
 
 ## Quick Start
 
-See [`docs/runbook.md`](docs/runbook.md) for the full cluster setup guide.
+For full AWS EKS deployment, see [`docs/EKS_DEPLOYMENT_GUIDE.md`](docs/EKS_DEPLOYMENT_GUIDE.md).
 
 For local development:
 
 ```bash
 # Clone the repo
-git clone https://github.com/<org>/ftgo-devops-project.git
-cd ftgo-devops-project
+git clone https://github.com/nairp126/ftgo-project.git
+cd ftgo-project
 
 # Start all services locally
 docker compose up --build
@@ -211,22 +211,30 @@ curl http://localhost:8000/health
 
 | Document | Purpose |
 |----------|---------|
-| [`docs/pre-migration-checklist.md`](docs/pre-migration-checklist.md) | Everything to do before writing a single line of migration code |
-| [`docs/runbook.md`](docs/runbook.md) | How to provision AWS EKS and deploy the full stack |
-| [`docs/adr/ADR-TEMPLATE.md`](docs/adr/ADR-TEMPLATE.md) | Template every person uses for their ADRs |
-| [`docs/adr/ADR-000-master.md`](docs/adr/ADR-000-master.md) | Master ADR combining all decisions |
-| [`docs/adr/ADR-001-api-gateway.md`](docs/adr/ADR-001-api-gateway.md) | Gateway architecture decisions |
+| [`docs/EKS_DEPLOYMENT_GUIDE.md`](docs/EKS_DEPLOYMENT_GUIDE.md) | **Primary deployment reference** — first-time setup AND redeploy after teardown |
+| [`docs/INTEGRATION_TROUBLESHOOTING_LOG.md`](docs/INTEGRATION_TROUBLESHOOTING_LOG.md) | All 43 issues encountered during deployment with root cause and fix |
+| [`docs/DEPLOYMENT_ERRORS.md`](docs/DEPLOYMENT_ERRORS.md) | CI/CD and Kubernetes error reference (17 categorised issues) |
+| [`docs/DEMO_VIVA_GUIDE.md`](docs/DEMO_VIVA_GUIDE.md) | Viva defence guide — 60s answers, examiner Q&A for all 5 roles |
+| [`docs/adr/ADR-000-master.md`](docs/adr/ADR-000-master.md) | Master ADR — all 12 architectural decisions with rationale |
+| [`docs/adr/ADR-001-api-gateway.md`](docs/adr/ADR-001-api-gateway.md) | Gateway architecture decisions (Pranav Nair) |
+| [`docs/adr/ADR-002-order-service.md`](docs/adr/ADR-002-order-service.md) | Order Service decisions (Kinjal Srivastava) |
+| [`docs/adr/ADR-003-kitchen-restaurant.md`](docs/adr/ADR-003-kitchen-restaurant.md) | Kitchen + Restaurant decisions (Vikrant Rana) |
+| [`docs/adr/ADR-004-accounting-service.md`](docs/adr/ADR-004-accounting-service.md) | Accounting Service decisions (Anirudh Chawla) |
+| [`docs/adr/ADR-005-consumer-cqrs.md`](docs/adr/ADR-005-consumer-cqrs.md) | Consumer + CQRS decisions (Anshuman Rangarh) |
+| [`docs/pre-migration-checklist.md`](docs/pre-migration-checklist.md) | Everything to verify before starting migration |
+| [`docs/runbook.md`](docs/runbook.md) | Original local dev runbook |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Branch strategy, PR rules, commit conventions |
 
 ---
 
 ## Deployment
 
-Full deployment instructions in [`docs/runbook.md`](docs/runbook.md).
+Full deployment instructions in [`docs/EKS_DEPLOYMENT_GUIDE.md`](docs/EKS_DEPLOYMENT_GUIDE.md).
 
 **Cluster:** `ftgo-eks-cluster` — AWS EKS, region `ap-south-1` (Mumbai)
-**Registry:** Amazon ECR (same AWS account, same region)
-**CI/CD:** GitHub Actions — each service has its own workflow
+**Registry:** Amazon ECR (`120569617989.dkr.ecr.ap-south-1.amazonaws.com`)
+**CI/CD:** GitHub Actions — each service has its own workflow under `.github/workflows/`
+**Teardown:** `python teardown.py` — destroys all AWS resources safely after demo
 
 ---
 

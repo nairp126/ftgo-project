@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ftgo-accounting-service
+  namespace: ftgo
+  labels:
+    app: ftgo-accounting-service
+    component: accounting
+    managed-by: kubectl
+spec:
+  # ClusterIP: internal only — Accounting Service is not externally exposed.
+  # External traffic reaches FTGO via the API Gateway (Person 5).
+  # Other services communicate with Accounting exclusively via Kafka, not HTTP.
+  type: ClusterIP
+  selector:
+    app: ftgo-accounting-service
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http   # named port "http" on the container (8080)

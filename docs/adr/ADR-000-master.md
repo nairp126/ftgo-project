@@ -1,9 +1,9 @@
 # ADR-000: Master Architecture Decision Record
 
-**Date:** [Fill in final week]
+**Date:** July 2026
 **Status:** Accepted
-**Owners:** All team members
-**Version:** 1.0
+**Owners:** Kinjal Srivastava, Vikrant Rana, Anirudh Chawla, Anshuman Rangarh, Pranav Nair
+**Version:** 2.0 (Final)
 
 > This document is the single source of truth for all architectural
 > decisions made during the FTGO monolith-to-microservices migration.
@@ -26,6 +26,8 @@
 - [Decision 8 — CQRS for Order History](#decision-8--cqrs-for-order-history)
 - [Decision 9 — Kubernetes Platform](#decision-9--kubernetes-platform)
 - [Decision 10 — CI/CD Pipeline](#decision-10--cicd-pipeline)
+- [Decision 11 — Kafka KRaft Mode](#decision-11--kafka-kraft-mode)
+- [Decision 12 — EKS Teardown and Redeploy Strategy](#decision-12--eks-teardown-and-redeploy-strategy)
 - [Full Architecture Diagram](#full-architecture-diagram)
 - [What We Would Do Differently](#what-we-would-do-differently)
 
@@ -42,17 +44,17 @@ one service at a time rather than a big-bang rewrite.
 
 | Component | Technology | Owner |
 |-----------|-----------|-------|
-| Order Service | Java / Spring Boot | [Person 1] |
-| Kitchen Service | Java / Spring Boot | [Person 2] |
-| Restaurant Service | Java / Spring Boot | [Person 2] |
-| Accounting Service | Java / Spring Boot | [Person 3] |
-| Consumer Service | Java / Spring Boot | [Person 4] |
-| Order History Service (CQRS) | Java / Spring Boot | [Person 4] |
-| Universal AI Gateway (Edge) | Python / FastAPI | [Person 5] |
-| FTGO API Gateway (Internal) | Java / Spring Cloud Gateway | [Person 5] |
-| Message Broker | Apache Kafka | All |
+| Order Service | Java / Spring Boot | Kinjal Srivastava |
+| Kitchen Service | Java / Spring Boot | Vikrant Rana |
+| Restaurant Service | Java / Spring Boot | Vikrant Rana |
+| Accounting Service | Java / Spring Boot | Anirudh Chawla |
+| Consumer Service | Java / Spring Boot | Anshuman Rangarh |
+| Order History Service (CQRS) | Java / Spring Boot | Anshuman Rangarh |
+| Universal AI Gateway (Edge) | Python / FastAPI | Pranav Nair |
+| FTGO API Gateway (Internal) | Python / FastAPI | Pranav Nair |
+| Message Broker | Apache Kafka (KRaft mode) | Pranav Nair |
 | Databases | PostgreSQL (one per service) | Each owner |
-| Orchestration | AWS EKS — ap-south-1 | [Person 5] |
+| Orchestration | AWS EKS — ap-south-1 | Pranav Nair |
 | CI/CD | GitHub Actions | Each owner |
 
 ---
@@ -347,6 +349,69 @@ OIDC — no long-lived credentials stored in GitHub).
 
 ---
 
+## Decision 11 — Kafka KRaft Mode (No Zookeeper)
+
+**Decision:** Deploy Apache Kafka in KRaft mode (`confluentinc/cp-kafka:7.5.0`)
+with `KAFKA_PROCESS_ROLES: broker,controller` — single-node, no Zookeeper.
+
+**Why:**
+Zookeeper was deprecated in Kafka 3.x and removed in 4.0. KRaft mode
+eliminates the external dependency, simplifying the deployment from two
+pods (Kafka + Zookeeper) to one. For a course project with a single
+broker topology this is the correct choice.
+
+**Critical configuration found in production:**
+```yaml
+spec:
+  template:
+    spec:
+      enableServiceLinks: false  # REQUIRED
+```
+Without `enableServiceLinks: false`, Kubernetes injects `KAFKA_PORT=tcp://...`
+into the pod. Confluent's entrypoint maps all `KAFKA_*` env vars to
+`server.properties`, causing `port=tcp://...` which crashes Kafka.
+This was Issue 10 in the troubleshooting log.
+
+**Alternatives considered:**
+- Strimzi Operator: Better for production, too heavyweight for this project scope.
+- Zookeeper mode: Deprecated, requires an additional deployment.
+
+---
+
+## Decision 12 — EKS Teardown and Redeploy Strategy
+
+**Decision:** Complete teardown via `teardown.py` (7-step sequence);
+redeploy via EKS Deployment Guide §6…14 (one-time setup in §1–5 persists).
+
+**Why a custom teardown script:**
+`eksctl delete cluster` alone is insufficient. It does not:
+- Clean up the ALB (created by the Load Balancer Controller from an Ingress
+  resource — must be removed *before* the cluster is deleted, by deleting
+  the `ftgo` namespace first and waiting for LBC to deregister the ALB).
+- Delete manually-created IAM roles (`AmazonEKSLoadBalancerControllerRole`,
+  `AmazonEKS_EBS_CSI_DriverRole`) or IAM policies.
+- Delete the cluster OIDC provider.
+
+**Teardown sequence (enforced order):**
+1. Delete `ftgo` namespace → triggers LBC to deprovision ALB
+2. Poll until ALB is gone (max 90s)
+3. `eksctl delete cluster --wait` → CloudFormation stacks
+4. Delete IAM roles (detach policies first)
+5. Delete IAM policy (`AWSLoadBalancerControllerIAMPolicy`)
+6. Delete OIDC provider
+7. Optionally delete ECR repos (default: retain for fast redeploy)
+
+**What survives teardown (by design):**
+- ECR repositories + all 8 service images (S3-tier storage cost only)
+- GitHub repository + all manifests + CI/CD workflows
+- GitHub Secrets (AWS credentials, EKS cluster name)
+- GitHub OIDC provider in AWS IAM (`token.actions.githubusercontent.com`)
+
+**Redeploy time after teardown:** ~40…45 minutes (cluster creation + infrastructure).
+Image builds are skipped because ECR already has images from CI/CD.
+
+---
+
 ## Full Architecture Diagram
 
 ```
@@ -371,9 +436,9 @@ OIDC — no long-lived credentials stored in GitHub).
                           │  Adds:   X-Tenant-ID, X-User-ID
                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│          FTGO API Gateway  (Spring Cloud Gateway / Java)         │
-│  • Path-based Routing      • API Composition (Mono.zip)          │
-│  • Distributed Tracing     • Prometheus Metrics                  │
+│          FTGO API Gateway  (FastAPI / Python)                    │
+│  • Path-based Routing      • Request Proxying                    │
+│  • Service Discovery       • Health Aggregation                  │
 └──────┬──────────┬──────────┬──────────┬────────────┬────────────┘
        │          │          │          │            │
        ▼          ▼          ▼          ▼            ▼
@@ -406,9 +471,11 @@ All services deployed in namespace: ftgo on AWS EKS (ap-south-1)
 
 | Decision | What we did | What we'd do differently | Why |
 |----------|------------|--------------------------|-----|
-| [Fill in final week] | | | |
-| [Fill in final week] | | | |
-| [Fill in final week] | | | |
+| Secret management | Hard-coded base64 secrets in `secret.yaml` committed to repo | Use AWS Secrets Manager or HashiCorp Vault with external-secrets-operator | Committed secrets are a security risk even when base64-encoded — not true encryption |
+| Single Kafka broker | One KRaft broker, no replication | Use at least 3 brokers with replication factor 3 | Single broker is a SPOF; any crash loses all in-flight messages |
+| Database isolation | One shared PostgreSQL instance, separate databases per service | One RDS instance per service or use Aurora Serverless | Shared instance creates noisy-neighbour risk; one service can exhaust connections |
+| CI/CD depth | Push-to-ECR only for most services; `kubectl apply` only in gateway workflow | Add `kubectl rollout status` + auto-rollback (`kubectl rollout undo`) to all pipelines | Most pipelines do not verify the deployment succeeded after push |
+| Observability | Actuator health endpoints only | Add Prometheus + Grafana + distributed tracing (Jaeger/Zipkin) to EKS | Without metrics dashboards, debugging production issues is entirely log-based |
 
 ---
 
@@ -416,8 +483,8 @@ All services deployed in namespace: ftgo on AWS EKS (ap-south-1)
 
 | ADR | Service | Owner | Status |
 |-----|---------|-------|--------|
-| [ADR-001](ADR-001-api-gateway.md) | API Gateway | [Person 5] | Accepted |
-| [ADR-002](ADR-002-order-service.md) | Order Service | [Person 1] | [Status] |
-| [ADR-003](ADR-003-kitchen-restaurant.md) | Kitchen + Restaurant | [Person 2] | [Status] |
-| [ADR-004](ADR-004-accounting.md) | Accounting Service | [Person 3] | [Status] |
-| [ADR-005](ADR-005-consumer-cqrs.md) | Consumer + Order History | [Person 4] | [Status] |
+| [ADR-001](ADR-001-api-gateway.md) | Universal AI Gateway + FTGO API Gateway | Pranav Nair | Accepted |
+| [ADR-002](ADR-002-order-service.md) | Order Service | Kinjal Srivastava | Accepted |
+| [ADR-003](ADR-003-kitchen-restaurant.md) | Kitchen + Restaurant Services | Vikrant Rana | Accepted |
+| [ADR-004](ADR-004-accounting-service.md) | Accounting Service | Anirudh Chawla | Accepted |
+| [ADR-005](ADR-005-consumer-cqrs.md) | Consumer + Order History Services | Anshuman Rangarh | Accepted |

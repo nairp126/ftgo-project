@@ -1,0 +1,31 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://kitchen-postgres:5432/kitchen_db}
+    username: ${SPRING_DATASOURCE_USERNAME:kitchen_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:kitchen_password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    open-in-view: false
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    consumer:
+      group-id: ${KITCHEN_KAFKA_GROUP_ID:kitchen-service}
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+app:
+  kafka:
+    order-created-topic: ${ORDER_CREATED_TOPIC:order.created}
+    menu-updated-topic: ${MENU_UPDATED_TOPIC:restaurant.menu.updated}
+    ticket-events-topic: ${TICKET_EVENTS_TOPIC:kitchen.ticket.events}

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ftgo-kitchen-service
+  labels:
+    app: kitchen-service
+    component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: kitchen-service
+  ports:
+    - name: http
+      port: 8082
+      targetPort: http
+      protocol: TCP
